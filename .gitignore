@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Runtime data: uploaded files and their metadata never belong in git
+/data/
+!/data/.gitkeep
+
+.env
+.env.local
+.DS_Store
+npm-debug.log*

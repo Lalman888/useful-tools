@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0f1419;
+  --color-muted: #5b6472;
+  --color-hairline: #e3e7ec;
+  --color-surface: #f7f8fa;
+  --color-brand: #1f4e79;
+}
+
+html, body { height: 100%; }
+
+body {
+  background: #ffffff;
+  color: var(--color-ink);
+  font-feature-settings: "cv02", "cv03", "cv04";
+}
+
+/* Tabular figures keep numeric columns from shifting as values change. */
+.tnum { font-variant-numeric: tabular-nums; }
