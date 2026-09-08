@@ -16,6 +16,13 @@ const TOOLS = [
     detail: "Tables · code · maths · footnotes",
   },
   {
+    href: "/pdf",
+    title: "PDF toolkit",
+    blurb:
+      "Merge PDFs, pull out a page range, rotate pages, or stamp a watermark across them. Runs entirely in the browser.",
+    detail: "Nothing uploaded",
+  },
+  {
     href: "/share",
     title: "Share a file",
     blurb:

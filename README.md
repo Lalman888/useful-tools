@@ -6,7 +6,9 @@ Four file tools in one small Next.js app:
 | --- | --- | --- |
 | Data viewer | `/viewer` | Reads CSV, TSV and Excel workbooks as a sortable, searchable table |
 | Markdown to PDF | `/markdown` | Typesets Markdown into a PDF with a cover, contents, headers and page numbers |
+| PDF toolkit | `/pdf` | Merge, extract, rotate and watermark PDFs, entirely in the browser |
 | Share a file | `/share` | Chunked resumable upload of any file, with a share link |
+| My uploads | `/uploads` | The links you have created, with copy and revoke |
 | Direct transfer | `/p2p` | Browser-to-browser transfer over WebRTC; nothing is stored |
 
 ## Running it
@@ -45,6 +47,7 @@ depends on where you run it.
 | --- | --- | --- |
 | Data viewer | Works | Works |
 | Markdown to PDF | Works | Works |
+| PDF toolkit | Works | Works |
 | Share a file | **Off** | Works |
 | Direct transfer | **Off** | Works |
 
@@ -148,6 +151,14 @@ survive that merge.
 Documents are rendered with JavaScript disabled and every request other than
 the document itself blocked, so pasted Markdown cannot reach local files or
 internal network hosts.
+
+### PDF toolkit
+
+Merging, page extraction, rotation and watermarking all run in the browser with
+pdf-lib, so documents are never uploaded and no size limit applies. Page
+selections use print-dialog syntax: `1-3, 7` or `5-` for everything from five
+onwards. Documents carrying only an owner password are opened rather than
+rejected, since they are readable.
 
 ### Share a file
 
