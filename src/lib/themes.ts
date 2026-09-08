@@ -214,6 +214,30 @@ figcaption {
   margin-top: 0.5em;
 }
 
+/* --- diagrams ---------------------------------------------------------- */
+
+figure.mermaid {
+  margin: 1.5em 0;
+  text-align: center;
+  break-inside: avoid;
+}
+figure.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  margin: 1.5em 0;
+  padding: 0.9em 1.1em;
+  border: 0.75pt solid #f0b4b4;
+  border-radius: 4pt;
+  background: #fdf5f5;
+  break-inside: avoid;
+}
+.mermaid-error-title { margin: 0; font-weight: 650; color: #9b1c1c; font-size: 0.9em; }
+.mermaid-error-message { margin: 0.2em 0 0.6em; color: #9b1c1c; font-size: 0.82em; }
+.mermaid-error pre { margin: 0; background: #fff; border-color: #f0b4b4; }
+
 /* --- math -------------------------------------------------------------- */
 
 .math-block { margin: 1.2em 0; text-align: center; break-inside: avoid; }

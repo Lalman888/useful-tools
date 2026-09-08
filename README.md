@@ -137,8 +137,19 @@ suggests re-saving as `.xlsx`.
 ### Markdown to PDF
 
 Supports GitHub-style tables, fenced code with syntax highlighting, task lists,
-footnotes, `$inline$` and `$$block$$` maths, and a `\pagebreak` line to force a
-page break.
+footnotes, `$inline$` and `$$block$$` maths, ```mermaid diagrams, and a
+`\pagebreak` line to force a page break.
+
+Diagrams are drawn in a page of their own rather than in the document. The
+document is rendered with JavaScript disabled so that pasted Markdown can never
+execute; Mermaid needs a script to run, so instead of relaxing that, its script
+runs against the diagram source alone, in a page that holds none of the user's
+HTML and can load nothing. The resulting SVG is inlined into the document, which
+is still rendered with scripts off, and Mermaid itself runs at `securityLevel:
+strict` so a diagram label cannot smuggle markup through. Rendered diagrams are
+cached by source, so an unchanged one costs nothing on the next preview.
+A diagram that fails to parse becomes a visible error block rather than failing
+the export.
 
 The preview pane is rendered by the server from the same stylesheet the
 exporter uses, so the two cannot drift apart. Contents-list page numbers are

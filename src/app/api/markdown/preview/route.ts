@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error }, { status: parsed.status });
   }
 
-  return new NextResponse(renderPreviewDocument(parsed.options), {
+  return new NextResponse(await renderPreviewDocument(parsed.options), {
     status: 200,
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
   });

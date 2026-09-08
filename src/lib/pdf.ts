@@ -1,13 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createRequire } from "node:module";
 import type { Browser, Page } from "puppeteer-core";
 import { PDFDocument, PDFName, PDFRef, PDFArray, PDFDict } from "pdf-lib";
-import { renderMarkdown, type Heading } from "./markdown";
+import { diagramPlaceholder, renderMarkdown, type Heading } from "./markdown";
+import { renderDiagrams, type MermaidTheme } from "./mermaidRender";
 import { buildThemeCss, highlightStyleFor, type ThemeId } from "./themes";
-
-const require = createRequire(import.meta.url);
+import { findPackageAsset, readPackageAsset } from "./packageAssets";
 
 /* ------------------------------ browser setup ----------------------------- */
 
@@ -162,56 +161,6 @@ export async function closeBrowser(): Promise<void> {
 
 /* ------------------------------ vendored CSS ------------------------------ */
 
-/**
- * Locates a file inside an installed package. `require.resolve` is tried first
- * but bundlers rewrite it, so fall back to walking up from the working
- * directory looking for node_modules. Returns null if the asset is genuinely
- * absent.
- */
-function findPackageAsset(relativePath: string): string | null {
-  try {
-    const resolved = require.resolve(/* turbopackIgnore: true */ relativePath);
-    if (fs.statSync(resolved).isFile()) return resolved;
-  } catch {
-    /* bundled builds rewrite require.resolve; fall through */
-  }
-
-  let dir = process.cwd();
-  for (let depth = 0; depth < 6; depth++) {
-    const candidate = path.join(dir, "node_modules", relativePath);
-    try {
-      if (fs.statSync(/* turbopackIgnore: true */ candidate).isFile()) return candidate;
-    } catch {
-      /* keep walking up */
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
-}
-
-const warnedAssets = new Set<string>();
-
-function readPackageAsset(relativePath: string): string {
-  const resolved = findPackageAsset(relativePath);
-  if (!resolved) {
-    // Degrading silently here once cost us correctly typeset maths, so say so.
-    if (!warnedAssets.has(relativePath)) {
-      warnedAssets.add(relativePath);
-      console.warn(
-        `[pdf] could not locate ${relativePath}; PDFs will render without it.`
-      );
-    }
-    return "";
-  }
-  try {
-    return fs.readFileSync(/* turbopackIgnore: true */ resolved, "utf8");
-  } catch {
-    return "";
-  }
-}
-
 const highlightCssCache = new Map<string, string>();
 let katexCssCache: string | null = null;
 
@@ -276,6 +225,7 @@ export type PdfOptions = {
   includeToc: boolean;
   /** Deepest heading level listed in the contents (1-4). */
   tocDepth: number;
+  mermaidTheme: MermaidTheme;
   /** Remove the document's opening H1 from the body when it is already on the cover. */
   dropFirstHeading: boolean;
   title: string;
@@ -298,6 +248,7 @@ export const DEFAULT_PDF_OPTIONS: Omit<PdfOptions, "markdown"> = {
   includeCover: false,
   includeToc: false,
   tocDepth: 3,
+  mermaidTheme: "neutral",
   dropFirstHeading: true,
   title: "",
   subtitle: "",
@@ -378,6 +329,15 @@ ${extraCss ? `<style>${extraCss}</style>` : ""}
 </html>`;
 }
 
+/** Swaps each diagram placeholder for the SVG rendered from its source. */
+function insertDiagrams(html: string, rendered: string[]): string {
+  let result = html;
+  rendered.forEach((svg, index) => {
+    result = result.replace(diagramPlaceholder(index), svg);
+  });
+  return result;
+}
+
 /* --------------------------------- preview -------------------------------- */
 
 /**
@@ -386,13 +346,23 @@ ${extraCss ? `<style>${extraCss}</style>` : ""}
  * exporter, so what the editor shows is what the PDF prints — apart from
  * pagination, which only Chromium's print layout can decide.
  */
-export function renderPreviewDocument(options: PdfOptions): string {
+export async function renderPreviewDocument(options: PdfOptions): Promise<string> {
   const rendered = renderMarkdown(options.markdown);
   const dropTitle = options.includeCover && options.dropFirstHeading;
   const firstH1 = rendered.headings.find((heading) => heading.level === 1);
-  const contentHtml = dropTitle
+  const withoutTitle = dropTitle
     ? rendered.html.replace(/^\s*<h1\b[^>]*>[\s\S]*?<\/h1>\s*/, "")
     : rendered.html;
+
+  // Diagrams are cached by source, so an unchanged one costs nothing on the
+  // next keystroke.
+  const contentHtml =
+    rendered.diagrams.length > 0
+      ? insertDiagrams(
+          withoutTitle,
+          await renderDiagrams(await getBrowser(), rendered.diagrams, options.mermaidTheme)
+        )
+      : withoutTitle;
 
   const tocHeadings = rendered.headings.filter((heading) => {
     if (heading.level > options.tocDepth) return false;
@@ -628,9 +598,16 @@ export async function markdownToPdf(options: PdfOptions): Promise<PdfResult> {
   // is dropped from the body along with its entry in the contents.
   const dropTitle = options.includeCover && options.dropFirstHeading;
   const firstH1 = headings.find((heading) => heading.level === 1);
-  const contentHtml = dropTitle
+  const withoutTitle = dropTitle
     ? rendered.html.replace(/^\s*<h1\b[^>]*>[\s\S]*?<\/h1>\s*/, "")
     : rendered.html;
+  const contentHtml =
+    rendered.diagrams.length > 0
+      ? insertDiagrams(
+          withoutTitle,
+          await renderDiagrams(browser, rendered.diagrams, options.mermaidTheme)
+        )
+      : withoutTitle;
 
   const tocHeadings = headings.filter((heading) => {
     if (heading.level > options.tocDepth) return false;

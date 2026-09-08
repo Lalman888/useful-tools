@@ -33,6 +33,13 @@ def reconcile(ledger, statement):
     return [row for row in ledger if row.id not in statement]
 \`\`\`
 
+\`\`\`mermaid
+graph LR
+  A[Draft] --> B{Review}
+  B -->|approved| C[Publish]
+  B -->|changes| A
+\`\`\`
+
 > Reliability reached 99.95% uptime this quarter.
 
 - [x] Migrate the primary datastore
@@ -58,6 +65,7 @@ type Options = {
   includeCover: boolean;
   includeToc: boolean;
   tocDepth: number;
+  mermaidTheme: string;
   dropFirstHeading: boolean;
   pageNumbers: boolean;
   title: string;
@@ -79,6 +87,7 @@ const DEFAULTS: Options = {
   includeCover: true,
   includeToc: true,
   tocDepth: 3,
+  mermaidTheme: "neutral",
   dropFirstHeading: true,
   pageNumbers: true,
   title: "",
@@ -391,6 +400,19 @@ export function MarkdownStudio() {
             />
           </Field>
         </div>
+
+        <Field label="Diagrams" hint="Applies to ```mermaid blocks.">
+          <select
+            value={options.mermaidTheme}
+            onChange={(event) => set("mermaidTheme", event.target.value)}
+            className={inputClass}
+          >
+            <option value="neutral">Neutral</option>
+            <option value="default">Default</option>
+            <option value="forest">Forest</option>
+            <option value="dark">Dark</option>
+          </select>
+        </Field>
 
         <Field label={`Body size — ${options.baseFontSize}pt`}>
           <input

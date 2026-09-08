@@ -2,6 +2,7 @@ import { DEFAULT_PDF_OPTIONS, type PdfOptions, type PaperSize } from "./pdf";
 import { isThemeId } from "./themes";
 
 const PAPERS: PaperSize[] = ["A4", "Letter", "Legal", "A3"];
+const MERMAID_THEMES = ["default", "neutral", "dark", "forest"] as const;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 /** Markdown large enough to be a denial-of-service rather than a document. */
@@ -53,6 +54,9 @@ export function parsePdfOptions(body: Record<string, unknown>): ParseResult {
       baseFontSize: clamp(Number(body.baseFontSize), 8, 16, DEFAULT_PDF_OPTIONS.baseFontSize),
       margin: clamp(Number(body.margin), 8, 40, DEFAULT_PDF_OPTIONS.margin),
       tocDepth: clamp(Number(body.tocDepth), 1, 4, DEFAULT_PDF_OPTIONS.tocDepth),
+      mermaidTheme: (MERMAID_THEMES as readonly string[]).includes(str(body.mermaidTheme, 20))
+        ? (str(body.mermaidTheme, 20) as (typeof MERMAID_THEMES)[number])
+        : DEFAULT_PDF_OPTIONS.mermaidTheme,
       numberHeadings: Boolean(body.numberHeadings),
       justify: Boolean(body.justify),
       includeCover: Boolean(body.includeCover),

@@ -10,6 +10,8 @@ export type Heading = { level: number; text: string; slug: string };
 export type RenderedMarkdown = {
   html: string;
   headings: Heading[];
+  /** Mermaid sources, in document order; the html holds a placeholder for each. */
+  diagrams: string[];
   /** Whether any math was rendered, so the caller can skip embedding math fonts. */
   hasMath: boolean;
   /** Title inferred from the first level-1 heading, if the user gave none. */
@@ -117,6 +119,10 @@ function pageBreakPlugin(md: MarkdownIt): void {
   md.renderer.rules.page_break = () => '<div class="page-break"></div>\n';
 }
 
+export function diagramPlaceholder(index: number): string {
+  return `<!--ut-diagram-${index}-->`;
+}
+
 /* --------------------------------- engine --------------------------------- */
 
 function slugify(text: string): string {
@@ -190,8 +196,28 @@ function collectHeadings(tokens: Token[]): Heading[] {
 export function renderMarkdown(source: string): RenderedMarkdown {
   const env = {};
   const tokens = engine.parse(source, env);
+
+  // Mermaid fences are lifted out before rendering and replaced by a comment
+  // placeholder. They cannot be turned into SVG here because that needs a
+  // browser, and this function is synchronous and used by the preview too.
+  const diagrams: string[] = [];
+  for (const token of tokens) {
+    if (token.type !== "fence") continue;
+    if (token.info.trim().toLowerCase() !== "mermaid") continue;
+    const index = diagrams.length;
+    diagrams.push(token.content);
+    token.type = "html_block";
+    token.content = `${diagramPlaceholder(index)}\n`;
+  }
+
   const html = engine.renderer.render(tokens, engine.options, env);
   const headings = collectHeadings(tokens);
   const inferredTitle = headings.find((h) => h.level === 1)?.text ?? null;
-  return { html, headings, inferredTitle, hasMath: html.includes('class="katex') };
+  return {
+    html,
+    headings,
+    diagrams,
+    inferredTitle,
+    hasMath: html.includes('class="katex'),
+  };
 }
