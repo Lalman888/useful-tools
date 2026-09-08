@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import type { Browser, Page } from "puppeteer-core";
@@ -37,25 +38,105 @@ function findChrome(): string {
   );
 }
 
+/**
+ * True on Vercel, Lambda and similar. There is no Chrome on the image, and the
+ * only writable directory is /tmp, so the browser has to be supplied by a
+ * package that unpacks itself there.
+ */
+function isServerless(): boolean {
+  return Boolean(
+    process.env.VERCEL ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.AWS_EXECUTION_ENV ||
+      process.env.FUNCTION_TARGET
+  );
+}
+
+type LaunchConfig = { executablePath: string; args: string[] };
+
+/**
+ * The serverless Chromium build ships only Open Sans, so a serif theme would
+ * silently print in sans and code in a proportional face. Point fontconfig at
+ * a directory we control and fill it with the bundled Liberation faces.
+ *
+ * This deliberately does not rely on the Chromium package's own font handling,
+ * which only runs under a real Lambda and gave no way to add faces to it.
+ */
+function prepareFonts(): void {
+  const fontDir = path.join(os.tmpdir(), "useful-tools-fonts");
+  try {
+    fs.mkdirSync(fontDir, { recursive: true });
+
+    const source = path.join(process.cwd(), "assets", "fonts");
+    let installed = 0;
+    for (const file of fs.readdirSync(source)) {
+      if (!file.endsWith(".ttf")) continue;
+      const destination = path.join(fontDir, file);
+      if (!fs.existsSync(destination)) fs.copyFileSync(path.join(source, file), destination);
+      installed++;
+    }
+
+    // fontconfig reads its configuration from FONTCONFIG_PATH/fonts.conf, so the
+    // file has to name every directory worth scanning, ours included.
+    fs.writeFileSync(
+      path.join(fontDir, "fonts.conf"),
+      `<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>${fontDir}</dir>
+  <dir>${path.join(os.tmpdir(), "fonts")}</dir>
+  <dir>/var/task/fonts</dir>
+  <cachedir>${path.join(os.tmpdir(), "fonts-cache")}</cachedir>
+</fontconfig>
+`
+    );
+
+    // Set before the Chromium package runs: it only fills this in if unset.
+    process.env.FONTCONFIG_PATH = fontDir;
+    if (installed === 0) console.warn("[pdf] no bundled fonts found in assets/fonts");
+  } catch (error) {
+    // Not fatal: Chromium falls back to whatever it can find.
+    console.warn("[pdf] could not prepare fonts", error);
+  }
+}
+
+async function launchConfig(): Promise<LaunchConfig> {
+  if (isServerless()) {
+    prepareFonts();
+    const chromium = (await import("@sparticuz/chromium")).default;
+    return {
+      executablePath: await chromium.executablePath(),
+      args: chromium.args,
+    };
+  }
+  return {
+    executablePath: findChrome(),
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--font-render-hinting=none", // consistent glyph metrics in PDF output
+    ],
+  };
+}
+
 let browserPromise: Promise<Browser> | null = null;
 
 /**
  * One long-lived browser shared by every render. Launching Chromium costs
  * several hundred milliseconds, which would otherwise be paid on every export.
+ * On serverless the process is short-lived anyway, so this amounts to one
+ * launch per warm instance.
  */
 async function getBrowser(): Promise<Browser> {
   if (!browserPromise) {
     browserPromise = (async () => {
       const puppeteer = await import("puppeteer-core");
+      const config = await launchConfig();
       const browser = await puppeteer.launch({
-        executablePath: findChrome(),
+        executablePath: config.executablePath,
+        args: config.args,
         headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--font-render-hinting=none", // consistent glyph metrics in PDF output
-        ],
       });
       // If Chromium dies, drop the handle so the next render relaunches.
       browser.on("disconnected", () => {

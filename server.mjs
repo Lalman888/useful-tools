@@ -8,6 +8,11 @@ const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOST ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? 3000);
 
+// Tells the app that this process serves /ws/p2p, so the direct-transfer page
+// knows whether peer signalling is actually reachable. It is absent when Next
+// is served without this custom server, as on serverless hosting.
+process.env.HAS_SIGNALING = "1";
+
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 

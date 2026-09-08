@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createUpload, ensureDirs } from "@/lib/storage";
+import { createUpload } from "@/lib/storage";
+import { storageUnavailableResponse } from "@/lib/storageGuard";
 import { CHUNK_SIZE, MAX_FILE_SIZE, DEFAULT_EXPIRY_HOURS } from "@/lib/config";
 
 export const runtime = "nodejs";
@@ -20,7 +21,8 @@ function asNumber(value: unknown): number | null {
 }
 
 export async function POST(request: Request) {
-  ensureDirs();
+  const unavailable = storageUnavailableResponse();
+  if (unavailable) return unavailable;
 
   let body: InitBody;
   try {

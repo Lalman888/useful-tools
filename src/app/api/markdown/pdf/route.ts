@@ -4,7 +4,7 @@ import { parsePdfOptions } from "@/lib/pdfOptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   let body: Record<string, unknown>;

@@ -36,6 +36,49 @@ connect.
 - `node_modules` must be present at runtime: the PDF renderer reads the KaTeX
   and highlight.js stylesheets, and KaTeX's fonts, from disk.
 
+## Deploying
+
+The four tools do not all need the same things from a host, so what you get
+depends on where you run it.
+
+| | Serverless (Vercel, Netlify, Lambda) | A server with a disk (Docker, Fly, Railway, a VPS) |
+| --- | --- | --- |
+| Data viewer | Works | Works |
+| Markdown to PDF | Works | Works |
+| Share a file | **Off** | Works |
+| Direct transfer | **Off** | Works |
+
+The two that switch off do so because of what serverless hosting is, not
+because of a missing setting:
+
+- **Sharing** needs a writable disk whose contents survive between requests.
+  A serverless function gets a read-only application directory and a `/tmp`
+  that is discarded, and the next request may land on a different instance
+  entirely, so a share link would break the moment it was handed over. The app
+  detects this at startup, the upload endpoints answer `503`, and the page says
+  so instead of failing mid-upload.
+- **Direct transfer** needs a WebSocket held open by a long-running process to
+  introduce the two browsers. Functions cannot hold one. `server.mjs` sets
+  `HAS_SIGNALING`, and the page reports the feature as unavailable when it is
+  absent.
+
+Both tools come back on their own the moment you run the app with its own
+server on a host that has a persistent volume — no configuration needed.
+
+### On Vercel specifically
+
+It deploys as-is with no `vercel.json`. Vercel ignores `server.mjs` and serves
+the Next build itself, so the viewer and the PDF exporter work and the other
+two report themselves off.
+
+PDF rendering uses `@sparticuz/chromium` there, because the function image has
+no browser. That image also ships only Open Sans, which would print serif
+themes in sans and code in a proportional face, so the Liberation faces in
+`assets/fonts` are copied into fontconfig's search path before Chromium starts
+and `outputFileTracingIncludes` keeps them in the deployed bundle. Note also
+that Vercel caps a request body at 4.5 MB, so `CHUNK_SIZE` would have to drop
+below that if you ever put sharing behind a blob store.
+
 ## Configuration
 
 Every setting is optional. See `.env.example`.

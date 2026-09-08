@@ -3,7 +3,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { customAlphabet } from "nanoid";
-import { FILES_DIR } from "./config";
+import { DATA_DIR, FILES_DIR } from "./config";
 
 /** Unambiguous alphabet: no look-alike characters, so ids survive being read aloud. */
 const ID_ALPHABET = "0123456789abcdefghijkmnpqrstuvwxyz";
@@ -219,6 +219,36 @@ export async function sweepExpired(): Promise<number> {
   return removed;
 }
 
-export function ensureDirs(): void {
-  fs.mkdirSync(FILES_DIR, { recursive: true });
+let storageState: { writable: boolean; reason: string } | null = null;
+
+/**
+ * Creates the data directory, reporting failure rather than throwing.
+ *
+ * On a serverless host the application directory is read-only and there is no
+ * durable disk at all, so this legitimately fails. It must never take the
+ * process down with it: the viewer and the PDF exporter do not touch storage
+ * and have to keep working.
+ */
+export function ensureDirs(): { writable: boolean; reason: string } {
+  if (storageState) return storageState;
+  try {
+    fs.mkdirSync(FILES_DIR, { recursive: true });
+    // Creating the directory is not proof we can write into it.
+    const probe = path.join(FILES_DIR, ".write-probe");
+    fs.writeFileSync(probe, "");
+    fs.rmSync(probe, { force: true });
+    storageState = { writable: true, reason: "" };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? "unknown";
+    storageState = {
+      writable: false,
+      reason: `${DATA_DIR} is not writable (${code})`,
+    };
+  }
+  return storageState;
+}
+
+/** Whether file sharing can work in this deployment. */
+export function storageAvailable(): boolean {
+  return ensureDirs().writable;
 }
