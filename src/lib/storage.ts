@@ -6,7 +6,9 @@ import { customAlphabet } from "nanoid";
 import { FILES_DIR } from "./config";
 
 /** Unambiguous alphabet: no look-alike characters, so ids survive being read aloud. */
-const nanoid = customAlphabet("0123456789abcdefghijkmnpqrstuvwxyz", 16);
+const ID_ALPHABET = "0123456789abcdefghijkmnpqrstuvwxyz";
+const ID_LENGTH = 16;
+const nanoid = customAlphabet(ID_ALPHABET, ID_LENGTH);
 
 export type FileMeta = {
   id: string;
@@ -22,7 +24,9 @@ export type FileMeta = {
   complete: boolean;
 };
 
-const ID_RE = /^[0-9a-hjkmnp-z]{16}$/;
+// Built from the alphabet itself: a hand-written character class silently
+// rejected valid ids once already.
+const ID_RE = new RegExp(`^[${ID_ALPHABET}]{${ID_LENGTH}}$`);
 
 /** Guards every filesystem path we build from a caller-supplied id. */
 export function isValidId(id: string): boolean {

@@ -266,7 +266,12 @@ function coverHtml(options: PdfOptions, fallbackTitle: string | null): string {
 </section>`;
 }
 
-function documentShell(options: PdfOptions, bodyHtml: string, needsMath: boolean): string {
+function documentShell(
+  options: PdfOptions,
+  bodyHtml: string,
+  needsMath: boolean,
+  extraCss = ""
+): string {
   const css = buildThemeCss(options.theme, {
     accent: options.accent,
     baseFontSize: options.baseFontSize,
@@ -281,9 +286,66 @@ function documentShell(options: PdfOptions, bodyHtml: string, needsMath: boolean
 <style>${highlightCss()}</style>
 ${needsMath ? `<style>${katexCss()}</style>` : ""}
 <style>${css}</style>
+${extraCss ? `<style>${extraCss}</style>` : ""}
 </head>
 <body>${bodyHtml}</body>
 </html>`;
+}
+
+/* --------------------------------- preview -------------------------------- */
+
+/**
+ * Splits the document into the same pieces the PDF is built from and wraps
+ * them in page-shaped sheets. The preview shares the theme stylesheet with the
+ * exporter, so what the editor shows is what the PDF prints — apart from
+ * pagination, which only Chromium's print layout can decide.
+ */
+export function renderPreviewDocument(options: PdfOptions): string {
+  const rendered = renderMarkdown(options.markdown);
+  const dropTitle = options.includeCover && options.dropFirstHeading;
+  const firstH1 = rendered.headings.find((heading) => heading.level === 1);
+  const contentHtml = dropTitle
+    ? rendered.html.replace(/^\s*<h1\b[^>]*>[\s\S]*?<\/h1>\s*/, "")
+    : rendered.html;
+
+  const tocHeadings = rendered.headings.filter((heading) => {
+    if (heading.level > options.tocDepth) return false;
+    if (dropTitle && heading === firstH1) return false;
+    return true;
+  });
+
+  const size = PAPER_SIZES[options.paper];
+  const previewCss = `
+html { background: #eceff3; }
+body { padding: 20px 16px 40px; }
+.sheet {
+  width: ${size.width};
+  min-height: 120mm;
+  margin: 0 auto 20px;
+  padding: ${options.margin}mm;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 8px 24px rgba(15, 23, 42, 0.08);
+  border-radius: 2px;
+}
+.sheet--cover { min-height: ${size.height}; display: flex; flex-direction: column; }
+.sheet--cover .cover { flex: 1; }
+/* Page breaks mean nothing in a continuous preview; show them as a rule. */
+.page-break {
+  height: 0;
+  border-top: 1px dashed #cbd5e1;
+  margin: 1.6em 0;
+}
+.toc { break-after: auto; }
+`;
+
+  const body = [
+    options.includeCover
+      ? `<div class="sheet sheet--cover">${coverHtml(options, rendered.inferredTitle)}</div>`
+      : "",
+    `<div class="sheet">${options.includeToc ? tocHtml(tocHeadings, null) : ""}<main class="doc">${contentHtml}</main></div>`,
+  ].join("");
+
+  return documentShell(options, body, rendered.hasMath, previewCss);
 }
 
 /* -------------------------------- rendering ------------------------------- */

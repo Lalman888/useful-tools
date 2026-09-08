@@ -135,6 +135,15 @@ function parseDelimited(
 /* --------------------------------- Excel --------------------------------- */
 
 /**
+ * Excel dates arrive as Date objects. Show a plain calendar date when there is
+ * no time component, which is what a spreadsheet cell almost always holds.
+ */
+function formatDate(value: Date): string {
+  const iso = value.toISOString();
+  return iso.endsWith("T00:00:00.000Z") ? iso.slice(0, 10) : iso.slice(0, 19).replace("T", " ");
+}
+
+/**
  * ExcelJS cell values are a union of primitives and tagged objects (formula
  * results, rich text, hyperlinks, errors). Flatten them to something a table
  * can render.
@@ -144,7 +153,7 @@ function cellToPrimitive(value: unknown): CellValue {
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return value;
   }
-  if (value instanceof Date) return value.toISOString();
+  if (value instanceof Date) return formatDate(value);
 
   const obj = value as Record<string, unknown>;
   // Formula cell: prefer the cached result over the formula text.
