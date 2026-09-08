@@ -1,5 +1,5 @@
-import { DEFAULT_PDF_OPTIONS, type PdfOptions, type PaperSize } from "./pdf";
-import { isThemeId } from "./themes";
+import { DEFAULT_PDF_OPTIONS, type PdfOptions, type PaperSize } from "./pdfTypes.ts";
+import { isThemeId } from "./themes.ts";
 
 const PAPERS: PaperSize[] = ["A4", "Letter", "Legal", "A3"];
 const MERMAID_THEMES = ["default", "neutral", "dark", "forest"] as const;
@@ -7,6 +7,20 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 /** Markdown large enough to be a denial-of-service rather than a document. */
 export const MAX_MARKDOWN_CHARS = 2_000_000;
+
+/** Roughly 1.5 MB of image once base64 is accounted for. */
+export const MAX_LOGO_CHARS = 2_000_000;
+
+// Only raster and vector images, and only as inline data. Accepting a URL here
+// would let a document pull in a remote resource at render time, which the
+// renderer otherwise forbids.
+const LOGO_RE = /^data:image\/(png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/]+=*$/;
+
+function logoFrom(value: unknown): string {
+  if (typeof value !== "string" || value === "") return "";
+  if (value.length > MAX_LOGO_CHARS) return "";
+  return LOGO_RE.test(value) ? value : "";
+}
 
 function clamp(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -54,6 +68,9 @@ export function parsePdfOptions(body: Record<string, unknown>): ParseResult {
       baseFontSize: clamp(Number(body.baseFontSize), 8, 16, DEFAULT_PDF_OPTIONS.baseFontSize),
       margin: clamp(Number(body.margin), 8, 40, DEFAULT_PDF_OPTIONS.margin),
       tocDepth: clamp(Number(body.tocDepth), 1, 4, DEFAULT_PDF_OPTIONS.tocDepth),
+      logo: logoFrom(body.logo),
+      logoInHeader: Boolean(body.logoInHeader),
+      logoWidth: clamp(Number(body.logoWidth), 10, 90, DEFAULT_PDF_OPTIONS.logoWidth),
       mermaidTheme: (MERMAID_THEMES as readonly string[]).includes(str(body.mermaidTheme, 20))
         ? (str(body.mermaidTheme, 20) as (typeof MERMAID_THEMES)[number])
         : DEFAULT_PDF_OPTIONS.mermaidTheme,

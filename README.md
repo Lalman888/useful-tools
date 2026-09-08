@@ -171,6 +171,18 @@ selections use print-dialog syntax: `1-3, 7` or `5-` for everything from five
 onwards. Documents carrying only an owner password are opened rather than
 rejected, since they are readable.
 
+Several `.md` files can be combined into one document. They are joined with a
+hard page break, so each file starts a chapter on a fresh page and its headings
+flow into the contents. Reorder them in the file strip above the editor.
+
+A letterhead image can be placed on the cover and repeated in the running
+header. It travels as an inline `data:` URI, because the renderer refuses to
+fetch anything at render time; a URL is rejected rather than fetched.
+
+The opening heading is only dropped when the cover is actually using it. With
+an explicit title set — or several files, where the first heading is chapter one
+rather than the document title — it is kept.
+
 ### Share a file
 
 Uploads resume: if a chunk fails, the client asks the server how many bytes it

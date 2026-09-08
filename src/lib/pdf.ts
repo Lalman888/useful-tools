@@ -4,7 +4,11 @@ import path from "node:path";
 import type { Browser, Page } from "puppeteer-core";
 import { PDFDocument, PDFName, PDFRef, PDFArray, PDFDict } from "pdf-lib";
 import { diagramPlaceholder, renderMarkdown, type Heading } from "./markdown";
-import { renderDiagrams, type MermaidTheme } from "./mermaidRender";
+import { renderDiagrams } from "./mermaidRender";
+import { DEFAULT_PDF_OPTIONS, type MermaidTheme, type PdfOptions, type PaperSize } from "./pdfTypes";
+
+export { DEFAULT_PDF_OPTIONS };
+export type { PdfOptions, PaperSize, MermaidTheme };
 import { buildThemeCss, highlightStyleFor, type ThemeId } from "./themes";
 import { findPackageAsset, readPackageAsset } from "./packageAssets";
 
@@ -210,55 +214,6 @@ function katexCss(): string {
 
 /* -------------------------------- documents ------------------------------- */
 
-export type PaperSize = "A4" | "Letter" | "Legal" | "A3";
-
-export type PdfOptions = {
-  markdown: string;
-  theme: ThemeId;
-  accent: string;
-  baseFontSize: number;
-  paper: PaperSize;
-  margin: number; // millimetres
-  numberHeadings: boolean;
-  justify: boolean;
-  includeCover: boolean;
-  includeToc: boolean;
-  /** Deepest heading level listed in the contents (1-4). */
-  tocDepth: number;
-  mermaidTheme: MermaidTheme;
-  /** Remove the document's opening H1 from the body when it is already on the cover. */
-  dropFirstHeading: boolean;
-  title: string;
-  subtitle: string;
-  author: string;
-  dateLabel: string;
-  headerText: string;
-  footerText: string;
-  pageNumbers: boolean;
-};
-
-export const DEFAULT_PDF_OPTIONS: Omit<PdfOptions, "markdown"> = {
-  theme: "report",
-  accent: "#1f4e79",
-  baseFontSize: 11,
-  paper: "A4",
-  margin: 20,
-  numberHeadings: false,
-  justify: false,
-  includeCover: false,
-  includeToc: false,
-  tocDepth: 3,
-  mermaidTheme: "neutral",
-  dropFirstHeading: true,
-  title: "",
-  subtitle: "",
-  author: "",
-  dateLabel: "",
-  headerText: "",
-  footerText: "",
-  pageNumbers: true,
-};
-
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -295,7 +250,12 @@ function coverHtml(options: PdfOptions, fallbackTitle: string | null): string {
         )
         .join("")}</dl>`
     : "";
+  const logo = options.logo
+    ? `<img class="cover-logo" src="${escapeHtml(options.logo)}" alt="" style="width:${options.logoWidth}mm">`
+    : "";
+
   return `<section class="cover">
+  ${logo}
   <div class="cover-rule"></div>
   <h1 class="cover-title">${escapeHtml(title)}</h1>
   ${options.subtitle ? `<p class="cover-subtitle">${escapeHtml(options.subtitle)}</p>` : ""}
@@ -348,7 +308,11 @@ function insertDiagrams(html: string, rendered: string[]): string {
  */
 export async function renderPreviewDocument(options: PdfOptions): Promise<string> {
   const rendered = renderMarkdown(options.markdown);
-  const dropTitle = options.includeCover && options.dropFirstHeading;
+  // Only drop the opening heading when the cover is actually using it. With an
+  // explicit title — or several files, where the first heading is chapter one
+  // rather than the document title — removing it loses a real section.
+  const dropTitle =
+    options.includeCover && options.dropFirstHeading && options.title.trim() === "";
   const firstH1 = rendered.headings.find((heading) => heading.level === 1);
   const withoutTitle = dropTitle
     ? rendered.html.replace(/^\s*<h1\b[^>]*>[\s\S]*?<\/h1>\s*/, "")
@@ -451,8 +415,12 @@ function chromeFooter(options: PdfOptions): string {
 
 function chromeHeader(options: PdfOptions): string {
   const style =
-    "font-family: -apple-system, 'Liberation Sans', Arial, sans-serif; font-size: 8pt; color: #9ca3af; width: 100%; padding: 0 14mm; display: flex; justify-content: flex-end;";
-  return `<div style="${style}"><span>${escapeHtml(options.headerText)}</span></div>`;
+    "font-family: -apple-system, 'Liberation Sans', Arial, sans-serif; font-size: 8pt; color: #9ca3af; width: 100%; padding: 0 14mm; display: flex; align-items: center; justify-content: space-between;";
+  const mark =
+    options.logoInHeader && options.logo
+      ? `<img src="${escapeHtml(options.logo)}" alt="" style="height: 6mm; opacity: 0.75;">`
+      : "<span></span>";
+  return `<div style="${style}">${mark}<span>${escapeHtml(options.headerText)}</span></div>`;
 }
 
 async function printPdf(
@@ -462,7 +430,13 @@ async function printPdf(
 ): Promise<Uint8Array> {
   const size = PAPER_SIZES[options.paper];
   const showChrome =
-    withChrome && Boolean(options.headerText || options.footerText || options.pageNumbers);
+    withChrome &&
+    Boolean(
+      options.headerText ||
+        options.footerText ||
+        options.pageNumbers ||
+        (options.logoInHeader && options.logo)
+    );
   const verticalMargin = showChrome
     ? `${Math.max(options.margin, 16)}mm`
     : `${options.margin}mm`;
@@ -596,7 +570,11 @@ export async function markdownToPdf(options: PdfOptions): Promise<PdfResult> {
 
   // With a cover page the opening H1 is the document title twice over, so it
   // is dropped from the body along with its entry in the contents.
-  const dropTitle = options.includeCover && options.dropFirstHeading;
+  // Only drop the opening heading when the cover is actually using it. With an
+  // explicit title — or several files, where the first heading is chapter one
+  // rather than the document title — removing it loses a real section.
+  const dropTitle =
+    options.includeCover && options.dropFirstHeading && options.title.trim() === "";
   const firstH1 = headings.find((heading) => heading.level === 1);
   const withoutTitle = dropTitle
     ? rendered.html.replace(/^\s*<h1\b[^>]*>[\s\S]*?<\/h1>\s*/, "")

@@ -66,6 +66,9 @@ type Options = {
   includeToc: boolean;
   tocDepth: number;
   mermaidTheme: string;
+  logo: string;
+  logoInHeader: boolean;
+  logoWidth: number;
   dropFirstHeading: boolean;
   pageNumbers: boolean;
   title: string;
@@ -88,6 +91,9 @@ const DEFAULTS: Options = {
   includeToc: true,
   tocDepth: 3,
   mermaidTheme: "neutral",
+  logo: "",
+  logoInHeader: false,
+  logoWidth: 40,
   dropFirstHeading: true,
   pageNumbers: true,
   title: "",
@@ -99,6 +105,15 @@ const DEFAULTS: Options = {
 };
 
 const STORAGE_KEY = "useful-tools:markdown-studio";
+
+type Doc = { id: string; name: string; text: string };
+
+function newId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+/** Files are joined with a hard page break, so each begins a fresh page. */
+const CHAPTER_SEPARATOR = "\n\n\\pagebreak\n\n";
 
 /**
  * Paper widths in CSS pixels at 96dpi. The preview renders at true paper width
@@ -115,7 +130,10 @@ const PAPER_WIDTH_PX: Record<string, number> = {
 const PREVIEW_GUTTER = 32;
 
 export function MarkdownStudio() {
-  const [markdown, setMarkdown] = useState(SAMPLE);
+  const [documents, setDocuments] = useState<Doc[]>([
+    { id: "first", name: "document.md", text: SAMPLE },
+  ]);
+  const [activeId, setActiveId] = useState("first");
   const [options, setOptions] = useState<Options>(DEFAULTS);
   const [preview, setPreview] = useState("");
   const [previewing, setPreviewing] = useState(false);
@@ -134,8 +152,18 @@ export function MarkdownStudio() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        const parsed = JSON.parse(saved) as { markdown?: string; options?: Partial<Options> };
-        if (typeof parsed.markdown === "string") setMarkdown(parsed.markdown);
+        const parsed = JSON.parse(saved) as {
+          markdown?: string;
+          documents?: Doc[];
+          options?: Partial<Options>;
+        };
+        if (Array.isArray(parsed.documents) && parsed.documents.length > 0) {
+          setDocuments(parsed.documents);
+          setActiveId(parsed.documents[0].id);
+        } else if (typeof parsed.markdown === "string") {
+          // Sessions saved before multi-file support held a single string.
+          setDocuments([{ id: "first", name: "document.md", text: parsed.markdown }]);
+        }
         if (parsed.options) setOptions((current) => ({ ...current, ...parsed.options }));
       }
     } catch {
@@ -148,13 +176,13 @@ export function MarkdownStudio() {
     if (!restored) return;
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ markdown, options }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ documents, options }));
       } catch {
         /* private mode, quota, or storage disabled */
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [markdown, options, restored]);
+  }, [documents, options, restored]);
 
   // Keep the preview scaled to whatever width the pane currently has.
   useEffect(() => {
@@ -170,6 +198,22 @@ export function MarkdownStudio() {
 
   const documentWidth = (PAPER_WIDTH_PX[options.paper] ?? 794) + PREVIEW_GUTTER;
   const scale = box.width > 0 ? Math.min(1, box.width / documentWidth) : 1;
+
+  // Every file, in order, as one document.
+  const markdown = useMemo(
+    () => documents.map((doc) => doc.text).join(CHAPTER_SEPARATOR),
+    [documents]
+  );
+  const active = documents.find((doc) => doc.id === activeId) ?? documents[0];
+
+  const updateActive = useCallback(
+    (text: string) => {
+      setDocuments((current) =>
+        current.map((doc) => (doc.id === active?.id ? { ...doc, text } : doc))
+      );
+    },
+    [active?.id]
+  );
 
   const payload = useMemo(() => ({ ...options, markdown }), [options, markdown]);
 
@@ -240,11 +284,33 @@ export function MarkdownStudio() {
     }
   };
 
-  const openMarkdownFile = (file: File) => {
-    void file.text().then((text) => setMarkdown(text));
+  const openMarkdownFiles = async (list: FileList) => {
+    const added: Doc[] = [];
+    for (const file of Array.from(list)) {
+      added.push({ id: newId(), name: file.name, text: await file.text() });
+    }
+    if (added.length === 0) return;
+    // Replace a pristine starting document, otherwise append as more chapters.
+    setDocuments((current) => {
+      const untouched =
+        current.length === 1 && current[0].id === "first" && current[0].text === SAMPLE;
+      return untouched ? added : [...current, ...added];
+    });
+    setActiveId(added[0].id);
+  };
+
+  const moveDoc = (index: number, delta: number) => {
+    setDocuments((current) => {
+      const next = [...current];
+      const target = index + delta;
+      if (target < 0 || target >= next.length) return current;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   };
 
   const fileInput = useRef<HTMLInputElement>(null);
+  const logoInput = useRef<HTMLInputElement>(null);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_280px]">
@@ -256,33 +322,103 @@ export function MarkdownStudio() {
           </h2>
           <div className="flex gap-1">
             <Button size="sm" variant="ghost" onClick={() => fileInput.current?.click()}>
-              Open .md
+              Add files
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setMarkdown(SAMPLE)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setDocuments([{ id: "first", name: "document.md", text: SAMPLE }]);
+                setActiveId("first");
+              }}
+            >
               Reset
             </Button>
           </div>
           <input
             ref={fileInput}
             type="file"
+            multiple
             accept=".md,.markdown,.txt"
             className="hidden"
             onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) openMarkdownFile(file);
+              if (event.target.files?.length) void openMarkdownFiles(event.target.files);
               event.target.value = "";
             }}
           />
         </div>
+
+        {documents.length > 1 && (
+          <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 py-1.5">
+            {documents.map((doc, index) => (
+              <div
+                key={doc.id}
+                className={cx(
+                  "flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs",
+                  doc.id === active?.id
+                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-300"
+                    : "text-slate-600 hover:bg-slate-200/60"
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => setActiveId(doc.id)}
+                  className="max-w-40 truncate px-1 py-0.5 font-medium"
+                  title={`Chapter ${index + 1}: ${doc.name}`}
+                >
+                  {index + 1}. {doc.name}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Move ${doc.name} earlier`}
+                  disabled={index === 0}
+                  onClick={() => moveDoc(index, -1)}
+                  className="px-0.5 text-slate-400 hover:text-slate-800 disabled:opacity-30"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Move ${doc.name} later`}
+                  disabled={index === documents.length - 1}
+                  onClick={() => moveDoc(index, 1)}
+                  className="px-0.5 text-slate-400 hover:text-slate-800 disabled:opacity-30"
+                >
+                  ›
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Remove ${doc.name}`}
+                  onClick={() => {
+                    setDocuments((current) => {
+                      const next = current.filter((entry) => entry.id !== doc.id);
+                      return next.length > 0 ? next : current;
+                    });
+                    if (doc.id === active?.id) {
+                      const fallback = documents.find((entry) => entry.id !== doc.id);
+                      if (fallback) setActiveId(fallback.id);
+                    }
+                  }}
+                  className="px-0.5 text-slate-400 hover:text-red-600"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <textarea
-          value={markdown}
-          onChange={(event) => setMarkdown(event.target.value)}
+          value={active?.text ?? ""}
+          onChange={(event) => updateActive(event.target.value)}
           spellCheck={false}
           className="flex-1 resize-none p-4 font-mono text-[13px] leading-relaxed text-slate-800 focus:outline-none"
           placeholder="Write or paste Markdown here…"
         />
         <p className="border-t border-slate-200 px-4 py-2 text-xs text-slate-500 tnum">
-          {markdown.length.toLocaleString()} characters
+          {documents.length > 1
+            ? `${documents.length} files · ${markdown.length.toLocaleString()} characters, each file starting a new page`
+            : `${markdown.length.toLocaleString()} characters`}
         </p>
       </section>
 
@@ -435,7 +571,11 @@ export function MarkdownStudio() {
           {options.includeCover && (
             <Checkbox
               label="Drop the opening heading"
-              hint="It already appears on the cover."
+              hint={
+                options.title.trim()
+                  ? "Ignored while a title is set: the heading is a section, not the title."
+                  : "It already appears on the cover."
+              }
               checked={options.dropFirstHeading}
               onChange={(value) => set("dropFirstHeading", value)}
             />
@@ -463,6 +603,63 @@ export function MarkdownStudio() {
         </div>
 
         <div className="space-y-3 border-t border-slate-200 pt-3">
+          <Field label="Letterhead" hint="Shown on the cover. PNG, JPEG or SVG.">
+            {options.logo ? (
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={options.logo} alt="" className="h-8 w-auto max-w-24 object-contain" />
+                <Button size="sm" variant="ghost" onClick={() => set("logo", "")}>
+                  Remove
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" className="w-full" onClick={() => logoInput.current?.click()}>
+                Choose an image
+              </Button>
+            )}
+            <input
+              ref={logoInput}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                // Read as a data URI: the renderer refuses to fetch anything,
+                // so the image has to travel inside the document.
+                if (file.size > 1_400_000) {
+                  setError("That image is too large; use one under about 1.4 MB.");
+                  return;
+                }
+                const reader = new FileReader();
+                reader.onload = () => set("logo", String(reader.result ?? ""));
+                reader.onerror = () => setError("Could not read that image.");
+                reader.readAsDataURL(file);
+              }}
+            />
+          </Field>
+
+          {options.logo && (
+            <>
+              <Field label={`Cover size — ${options.logoWidth}mm`}>
+                <input
+                  type="range"
+                  min={10}
+                  max={90}
+                  value={options.logoWidth}
+                  onChange={(event) => set("logoWidth", Number(event.target.value))}
+                  className="w-full accent-slate-900"
+                />
+              </Field>
+              <Checkbox
+                label="Repeat it in the header"
+                checked={options.logoInHeader}
+                onChange={(value) => set("logoInHeader", value)}
+              />
+            </>
+          )}
+
           <Field label="Title" hint="Defaults to the first heading.">
             <TextInput
               value={options.title}

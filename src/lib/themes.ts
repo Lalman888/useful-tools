@@ -265,6 +265,14 @@ figure.mermaid svg {
   position: relative;
   padding: 0;
 }
+.cover-logo {
+  display: block;
+  height: auto;
+  max-width: 60%;
+  /* The generic img rule centres with auto side margins; the mark should sit
+     on the same left edge as the rule and the title. */
+  margin: 0 0 2.2em;
+}
 .cover-rule {
   width: 68pt;
   height: 4pt;
