@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import type { Browser, Page } from "puppeteer-core";
 import { PDFDocument, PDFName, PDFRef, PDFArray, PDFDict } from "pdf-lib";
 import { renderMarkdown, type Heading } from "./markdown";
-import { buildThemeCss, type ThemeId } from "./themes";
+import { buildThemeCss, highlightStyleFor, type ThemeId } from "./themes";
 
 const require = createRequire(import.meta.url);
 
@@ -131,12 +131,17 @@ function readPackageAsset(relativePath: string): string {
   }
 }
 
-let highlightCssCache: string | null = null;
+const highlightCssCache = new Map<string, string>();
 let katexCssCache: string | null = null;
 
-function highlightCss(): string {
-  highlightCssCache ??= readPackageAsset("highlight.js/styles/github.css");
-  return highlightCssCache;
+function highlightCss(theme: ThemeId): string {
+  const asset = highlightStyleFor(theme);
+  let css = highlightCssCache.get(asset);
+  if (css === undefined) {
+    css = readPackageAsset(asset);
+    highlightCssCache.set(asset, css);
+  }
+  return css;
 }
 
 /**
@@ -283,7 +288,7 @@ function documentShell(
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(options.title || "Document")}</title>
-<style>${highlightCss()}</style>
+<style>${highlightCss(options.theme)}</style>
 ${needsMath ? `<style>${katexCss()}</style>` : ""}
 <style>${css}</style>
 ${extraCss ? `<style>${extraCss}</style>` : ""}

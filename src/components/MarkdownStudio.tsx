@@ -91,6 +91,20 @@ const DEFAULTS: Options = {
 
 const STORAGE_KEY = "useful-tools:markdown-studio";
 
+/**
+ * Paper widths in CSS pixels at 96dpi. The preview renders at true paper width
+ * so its line breaks match the PDF, then the whole frame is scaled down to fit
+ * the pane rather than reflowing the text.
+ */
+const PAPER_WIDTH_PX: Record<string, number> = {
+  A4: 794,
+  Letter: 816,
+  Legal: 816,
+  A3: 1123,
+};
+/** Matches the horizontal padding the preview stylesheet puts around the sheet. */
+const PREVIEW_GUTTER = 32;
+
 export function MarkdownStudio() {
   const [markdown, setMarkdown] = useState(SAMPLE);
   const [options, setOptions] = useState<Options>(DEFAULTS);
@@ -99,6 +113,8 @@ export function MarkdownStudio() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
+  const previewBox = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ width: 0, height: 0 });
 
   const set = useCallback(<K extends keyof Options>(key: K, value: Options[K]) => {
     setOptions((current) => ({ ...current, [key]: value }));
@@ -130,6 +146,21 @@ export function MarkdownStudio() {
     }, 400);
     return () => clearTimeout(timer);
   }, [markdown, options, restored]);
+
+  // Keep the preview scaled to whatever width the pane currently has.
+  useEffect(() => {
+    const element = previewBox.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      setBox({ width: element.clientWidth, height: element.clientHeight });
+    });
+    observer.observe(element);
+    setBox({ width: element.clientWidth, height: element.clientHeight });
+    return () => observer.disconnect();
+  }, [preview]);
+
+  const documentWidth = (PAPER_WIDTH_PX[options.paper] ?? 794) + PREVIEW_GUTTER;
+  const scale = box.width > 0 ? Math.min(1, box.width / documentWidth) : 1;
 
   const payload = useMemo(() => ({ ...options, markdown }), [options, markdown]);
 
@@ -254,20 +285,28 @@ export function MarkdownStudio() {
           </h2>
           {previewing && <Spinner className="text-slate-400" />}
         </div>
-        {preview ? (
-          <iframe
-            title="Document preview"
-            srcDoc={preview}
-            // The preview is our own server-rendered HTML, but it is built from
-            // user input, so it runs in a sandbox with no script execution.
-            sandbox=""
-            className="flex-1 border-0 bg-slate-200"
-          />
-        ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-            Nothing to preview yet.
-          </div>
-        )}
+        <div ref={previewBox} className="relative flex-1 overflow-hidden bg-slate-200">
+          {preview ? (
+            <iframe
+              title="Document preview"
+              srcDoc={preview}
+              // Our own server-rendered HTML, but built from user input, so it
+              // runs sandboxed with scripts disabled.
+              sandbox=""
+              style={{
+                width: documentWidth,
+                height: box.height > 0 ? box.height / scale : "100%",
+                transform: `scale(${scale})`,
+                transformOrigin: "top left",
+              }}
+              className="border-0"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-slate-500">
+              Nothing to preview yet.
+            </div>
+          )}
+        </div>
       </section>
 
       {/* ------------------------------ controls ----------------------------- */}

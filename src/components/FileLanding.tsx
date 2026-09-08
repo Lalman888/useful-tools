@@ -30,6 +30,32 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
+/** Friendly labels for the types people actually share; anything else falls
+ *  back to the file's extension, which beats a 70-character MIME string. */
+const TYPE_LABELS: Record<string, string> = {
+  "application/pdf": "PDF",
+  "application/zip": "ZIP archive",
+  "application/x-zip-compressed": "ZIP archive",
+  "application/x-tar": "TAR archive",
+  "application/gzip": "Gzip archive",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel workbook",
+  "application/vnd.ms-excel": "Excel workbook (legacy)",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word document",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint deck",
+  "text/csv": "CSV",
+  "text/plain": "Plain text",
+  "application/json": "JSON",
+};
+
+function describeType(type: string | undefined, name: string): string {
+  if (type && TYPE_LABELS[type]) return TYPE_LABELS[type];
+  if (type?.startsWith("image/")) return `${type.slice(6).toUpperCase()} image`;
+  if (type?.startsWith("video/")) return `${type.slice(6).toUpperCase()} video`;
+  if (type?.startsWith("audio/")) return `${type.slice(6).toUpperCase()} audio`;
+  const extension = name.includes(".") ? name.split(".").pop() : "";
+  return extension ? `${extension.toUpperCase()} file` : "File";
+}
+
 const INLINE_PREVIEW = new Set([
   "application/pdf",
   "image/png",
@@ -150,7 +176,7 @@ export function FileLanding({ id }: { id: string }) {
             <h1 className="truncate text-lg font-semibold text-slate-900">{meta.name}</h1>
             <p className="mt-1 text-sm text-slate-600 tnum">
               {formatBytes(meta.size ?? 0)}
-              {meta.type ? ` · ${meta.type}` : ""}
+              {` · ${describeType(meta.type, meta.name)}`}
               {typeof meta.downloads === "number" && ` · ${meta.downloads} downloads`}
             </p>
             {expires && (

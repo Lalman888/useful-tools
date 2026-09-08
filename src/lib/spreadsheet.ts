@@ -80,7 +80,6 @@ function parseDelimited(
 ): Promise<WorkbookData> {
   return new Promise((resolve, reject) => {
     const rows: CellValue[][] = [];
-    let total = 0;
     let truncated = false;
     const notices: string[] = [];
 
@@ -93,7 +92,6 @@ function parseDelimited(
       // and long numbers that exceed IEEE-754 precision.
       dynamicTyping: false,
       step: (result, parser) => {
-        total++;
         if (rows.length < MAX_PREVIEW_ROWS + 1) {
           rows.push(result.data as CellValue[]);
         } else if (!truncated) {

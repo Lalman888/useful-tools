@@ -134,9 +134,7 @@ export function DataGrid({
               >
                 <span className="truncate">{column}</span>
                 <span
-                  className={
-                    active ? "text-slate-900" : "text-transparent group-hover:text-slate-300"
-                  }
+                  className={active ? "text-slate-900" : "text-slate-300"}
                   aria-hidden="true"
                 >
                   {active ? (sort.direction === "asc" ? "↑" : "↓") : "↕"}

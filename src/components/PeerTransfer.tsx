@@ -55,11 +55,18 @@ export function PeerTransfer({ initialCode }: { initialCode?: string }) {
   const fileRef = useRef<File | null>(null);
   const targetRef = useRef<SaveTarget | null>(null);
   const receivedRef = useRef(0);
-  const expectedRef = useRef(0);
+  // The data-channel and socket handlers are installed once and then outlive
+  // several renders, so anything they read must come from a ref rather than a
+  // captured state value.
+  const incomingRef = useRef<Incoming | null>(null);
+  const phaseRef = useRef<Phase>("idle");
   const startedRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => setOrigin(window.location.origin), []);
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const teardown = useCallback(() => {
     channelRef.current?.close();
@@ -131,12 +138,15 @@ export function PeerTransfer({ initialCode }: { initialCode?: string }) {
     const target = targetRef.current;
     if (!target) return;
     await target.finish();
-    if (target.blobParts && incoming) {
-      const blob = new Blob(target.blobParts, { type: incoming.type || "application/octet-stream" });
+    const meta = incomingRef.current;
+    if (target.blobParts) {
+      const blob = new Blob(target.blobParts, {
+        type: meta?.type || "application/octet-stream",
+      });
       setSavedBlobUrl(URL.createObjectURL(blob));
     }
     setPhase("complete");
-  }, [incoming]);
+  }, []);
 
   const attachReceiver = useCallback(
     (channel: RTCDataChannel) => {
@@ -149,8 +159,9 @@ export function PeerTransfer({ initialCode }: { initialCode?: string }) {
         if (typeof event.data === "string") {
           const message = JSON.parse(event.data) as PeerMessage;
           if (message.kind === "meta") {
-            expectedRef.current = message.size;
-            setIncoming({ name: message.name, size: message.size, type: message.type });
+            const meta = { name: message.name, size: message.size, type: message.type };
+            incomingRef.current = meta;
+            setIncoming(meta);
             setPhase("offered");
           } else if (message.kind === "done") {
             queue = queue.then(finishReceiving);
@@ -165,7 +176,8 @@ export function PeerTransfer({ initialCode }: { initialCode?: string }) {
   );
 
   const acceptTransfer = async () => {
-    if (!incoming) return;
+    const meta = incomingRef.current;
+    if (!meta) return;
     try {
       if (canStreamToDisk()) {
         // Streaming to a real file keeps memory flat, so the size of the
@@ -175,7 +187,7 @@ export function PeerTransfer({ initialCode }: { initialCode?: string }) {
             showSaveFilePicker: (options: unknown) => Promise<FileSystemFileHandle>;
           }
         ).showSaveFilePicker;
-        const handle = await picker({ suggestedName: incoming.name });
+        const handle = await picker({ suggestedName: meta.name });
         const writable = await handle.createWritable();
         targetRef.current = {
           write: (chunk) => writable.write(chunk),
@@ -293,7 +305,7 @@ export function PeerTransfer({ initialCode }: { initialCode?: string }) {
           if (sdp) await peerRef.current.setRemoteDescription(sdp);
           if (candidate) await peerRef.current.addIceCandidate(candidate).catch(() => undefined);
         }
-        if (message.type === "peer-left" && phase !== "complete") {
+        if (message.type === "peer-left" && phaseRef.current !== "complete") {
           fail("The other side disconnected.");
         }
       };
@@ -335,7 +347,7 @@ export function PeerTransfer({ initialCode }: { initialCode?: string }) {
             await peerRef.current.addIceCandidate(candidate).catch(() => undefined);
           }
         }
-        if (message.type === "peer-left" && phase !== "complete") {
+        if (message.type === "peer-left" && phaseRef.current !== "complete") {
           fail("The other side disconnected.");
         }
       };
@@ -356,6 +368,7 @@ export function PeerTransfer({ initialCode }: { initialCode?: string }) {
     setCode("");
     setFile(null);
     setIncoming(null);
+    incomingRef.current = null;
     setTransferred(0);
     setRate(0);
     setError(null);

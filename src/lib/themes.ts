@@ -42,6 +42,16 @@ export function isThemeId(value: string): value is ThemeId {
   return THEMES.some((theme) => theme.id === value);
 }
 
+/**
+ * The technical theme prints code on a dark panel, so it needs a syntax
+ * palette built for a dark background rather than the light default.
+ */
+export function highlightStyleFor(theme: ThemeId): string {
+  return theme === "technical"
+    ? "highlight.js/styles/github-dark.css"
+    : "highlight.js/styles/github.css";
+}
+
 /** Metric-compatible stacks chosen from fonts that ship with common Linux images. */
 const SERIF = `"Charter", "Bitstream Charter", "Liberation Serif", "Times New Roman", "DejaVu Serif", Georgia, serif`;
 const SANS = `"Inter", "Liberation Sans", "Helvetica Neue", Helvetica, "DejaVu Sans", Arial, sans-serif`;
@@ -335,7 +345,8 @@ h4 { font-size: 1em; color: var(--muted); text-transform: uppercase; letter-spac
 body { font-family: ${SANS}; }
 h1, h2, h3, h4, h5, h6, .cover-title, .toc h2 { font-family: ${SANS}; font-weight: 680; letter-spacing: -0.02em; }
 h1 { font-size: 2em; }
-h1::after {
+/* Scoped to the body: the cover already has its own rule above the title. */
+.doc h1::after {
   content: "";
   display: block;
   width: 42pt;

@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { NextResponse } from "next/server";
 import { blobPath, isExpired, readMeta } from "@/lib/storage";
 import { accessCookieName, verifyAccess } from "@/lib/auth";
