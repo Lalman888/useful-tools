@@ -188,6 +188,13 @@ export function hashPassword(password: string): string {
   return `${salt.toString("base64url")}:${derived.toString("base64url")}`;
 }
 
+/** Constant-time compare for secrets handed back to us by a client. */
+export function tokensMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 export function verifyPassword(password: string, stored: string): boolean {
   const [saltPart, hashPart] = stored.split(":");
   if (!saltPart || !hashPart) return false;

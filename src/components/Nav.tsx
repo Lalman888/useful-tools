@@ -4,6 +4,7 @@ const LINKS = [
   { href: "/viewer", label: "Data viewer" },
   { href: "/markdown", label: "Markdown to PDF" },
   { href: "/share", label: "Share a file" },
+  { href: "/uploads", label: "My uploads" },
   { href: "/p2p", label: "Direct transfer" },
 ];
 

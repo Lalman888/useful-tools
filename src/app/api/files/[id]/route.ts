@@ -7,6 +7,7 @@ import {
   isExpired,
   readMeta,
   recordDownload,
+  tokensMatch,
 } from "@/lib/storage";
 import { accessCookieName, verifyAccess } from "@/lib/auth";
 
@@ -123,7 +124,7 @@ export async function DELETE(request: Request, { params }: Params) {
   if (!meta) return NextResponse.json({ error: "File not found." }, { status: 404 });
 
   const token = new URL(request.url).searchParams.get("token") ?? "";
-  if (token !== meta.deleteToken) {
+  if (!tokensMatch(token, meta.deleteToken)) {
     return NextResponse.json({ error: "Invalid delete token." }, { status: 403 });
   }
   await deleteFile(id);

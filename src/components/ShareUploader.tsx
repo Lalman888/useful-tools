@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { uploadFile, type UploadSettings } from "@/lib/uploadClient";
+import { rememberUpload } from "@/lib/uploadHistory";
 import { Alert, Button, Checkbox, Field, Spinner, TextInput, cx, inputClass } from "./ui";
 
 type Status = "queued" | "uploading" | "done" | "error" | "cancelled";
@@ -42,18 +43,6 @@ function formatDuration(seconds: number): string {
   if (seconds < 60) return `${Math.ceil(seconds)}s left`;
   if (seconds < 3600) return `${Math.ceil(seconds / 60)}m left`;
   return `${(seconds / 3600).toFixed(1)}h left`;
-}
-
-/** Remembers delete tokens locally so the uploader can revoke their own links. */
-function rememberUpload(id: string, name: string, deleteToken: string): void {
-  try {
-    const key = "useful-tools:uploads";
-    const existing = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown[];
-    existing.unshift({ id, name, deleteToken, at: Date.now() });
-    localStorage.setItem(key, JSON.stringify(existing.slice(0, 50)));
-  } catch {
-    /* storage may be unavailable; the link still works */
-  }
 }
 
 export function ShareUploader() {
@@ -102,7 +91,11 @@ export function ShareUploader() {
             }),
           controller.signal
         );
-        rememberUpload(result.id, item.file.name, result.deleteToken);
+        rememberUpload({
+          id: result.id,
+          name: item.file.name,
+          deleteToken: result.deleteToken,
+        });
         update(item.key, {
           status: "done",
           uploaded: item.file.size,
