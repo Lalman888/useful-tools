@@ -2,7 +2,21 @@ import { ShareUploader } from "@/components/ShareUploader";
 import { Alert, PageHeader } from "@/components/ui";
 import { storageAvailable } from "@/lib/storage";
 
-export const metadata = { title: "Share a file · Useful Tools" };
+import type { Metadata } from "next";
+import { toolByHref } from "@/lib/site";
+
+const tool = toolByHref("/share")!;
+
+export const metadata: Metadata = {
+  title: tool.name,
+  description: tool.description,
+  alternates: { canonical: tool.href },
+  openGraph: {
+    title: `${tool.name} · Useful Tools`,
+    description: tool.description,
+    url: tool.href,
+  },
+};
 
 // Storage is a property of the running host, not of the build, so this page
 // must be rendered per request rather than prerendered.
@@ -12,7 +26,7 @@ export default function SharePage() {
   const available = storageAvailable();
 
   return (
-    <main className="mx-auto max-w-6xl px-5 py-10">
+    <main id="main" className="mx-auto max-w-6xl px-5 py-10">
       <PageHeader
         title="Share a file"
         description="Upload anything and hand over a link. Set an expiry, a password or a download cap before you start."

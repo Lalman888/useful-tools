@@ -1,7 +1,21 @@
 import { PeerTransfer } from "@/components/PeerTransfer";
 import { Alert, PageHeader } from "@/components/ui";
 
-export const metadata = { title: "Direct transfer · Useful Tools" };
+import type { Metadata } from "next";
+import { toolByHref } from "@/lib/site";
+
+const tool = toolByHref("/p2p")!;
+
+export const metadata: Metadata = {
+  title: tool.name,
+  description: tool.description,
+  alternates: { canonical: tool.href },
+  openGraph: {
+    title: `${tool.name} · Useful Tools`,
+    description: tool.description,
+    url: tool.href,
+  },
+};
 
 export default async function P2pPage({
   searchParams,
@@ -14,7 +28,7 @@ export default async function P2pPage({
   const signalling = process.env.HAS_SIGNALING === "1";
 
   return (
-    <main className="mx-auto max-w-6xl px-5 py-10">
+    <main id="main" className="mx-auto max-w-6xl px-5 py-10">
       <PageHeader
         title="Direct transfer"
         description="Send a file straight from one browser to another. The server only introduces the two sides; the bytes never pass through it, so nothing limits how large the file can be."

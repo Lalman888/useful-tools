@@ -1,60 +1,54 @@
 import Link from "next/link";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, TOOLS } from "@/lib/site";
 
-const TOOLS = [
-  {
-    href: "/viewer",
-    title: "Data viewer",
-    blurb:
-      "Open a CSV, TSV or Excel workbook and read it as a real table — sheet tabs, sorting, search and frozen headers. Large files stay responsive.",
-    detail: ".csv · .tsv · .xlsx · .xlsm",
-  },
-  {
-    href: "/preview",
-    title: "Markdown preview",
-    blurb:
-      "Paste Markdown and read it rendered, with proper typography, tables, code, maths and diagrams. No cover page, no contents list — just the document.",
-    detail: "Paste and read",
-  },
-  {
-    href: "/markdown",
-    title: "Markdown to PDF",
-    blurb:
-      "Turn Markdown into a typeset document: four professional themes, a cover page, a contents list with real page numbers, headers and footers.",
-    detail: "Tables · code · maths · footnotes",
-  },
-  {
-    href: "/pdf",
-    title: "PDF toolkit",
-    blurb:
-      "Merge PDFs, pull out a page range, rotate pages, or stamp a watermark across them. Runs entirely in the browser.",
-    detail: "Nothing uploaded",
-  },
-  {
-    href: "/share",
-    title: "Share a file",
-    blurb:
-      "Upload anything and get a link. Uploads are chunked and resumable with no size limit in the app, and you can add an expiry, a password or a download cap.",
-    detail: "Any file type · resumable",
-  },
-  {
-    href: "/p2p",
-    title: "Direct transfer",
-    blurb:
-      "Send a file straight from one browser to another over an encrypted peer connection. Nothing is stored on the server, so nothing constrains the size.",
-    detail: "Peer to peer · nothing stored",
-  },
-];
+/**
+ * Describes the site to search engines in the vocabulary they read. Rendered
+ * as a script tag, but it is data rather than code, built from the same list
+ * the page itself renders.
+ */
+function structuredData() {
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": `${SITE_URL}/#website`,
+        url: SITE_URL,
+        name: SITE_NAME,
+        description: SITE_DESCRIPTION,
+        inLanguage: "en",
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": `${SITE_URL}/#app`,
+        name: SITE_NAME,
+        applicationCategory: "UtilitiesApplication",
+        operatingSystem: "Any, via a web browser",
+        url: SITE_URL,
+        description: SITE_DESCRIPTION,
+        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        featureList: TOOLS.filter((tool) => tool.indexable).map((tool) => tool.name),
+      },
+    ],
+  };
+}
 
 export default function Home() {
   return (
-    <main className="mx-auto max-w-6xl px-5 py-16">
+    <main id="main" className="mx-auto max-w-6xl px-5 py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData()) }}
+      />
+
       <div className="max-w-2xl">
         <h1 className="text-4xl font-semibold tracking-tight text-balance text-slate-900">
           A small set of tools for files you actually work with.
         </h1>
         <p className="mt-4 text-base leading-relaxed text-slate-600">
-          Read spreadsheets without opening Excel, hand someone a file without a size
-          limit, and turn a Markdown draft into a document you would be happy to send.
+          Read spreadsheets without opening Excel, read Markdown without a build step,
+          turn a draft into a document you would be happy to send, and hand someone a
+          file without a size limit.
         </p>
       </div>
 
@@ -65,9 +59,9 @@ export default function Home() {
             href={tool.href}
             className="group flex flex-col rounded-xl border border-slate-200 bg-white p-6 transition hover:border-slate-400 hover:shadow-sm"
           >
-            <h2 className="text-base font-semibold text-slate-900">{tool.title}</h2>
+            <h2 className="text-base font-semibold text-slate-900">{tool.name}</h2>
             <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-600">
-              {tool.blurb}
+              {tool.description}
             </p>
             <span className="mt-4 text-xs font-medium tracking-wide text-slate-400 uppercase">
               {tool.detail}
@@ -77,9 +71,10 @@ export default function Home() {
       </div>
 
       <p className="mt-10 max-w-2xl text-xs leading-relaxed text-slate-500">
-        Stored files live on this server&rsquo;s own disk, so capacity is bounded by the
-        volume it runs on rather than by a per-file cap. For genuinely unbounded
-        transfers, use{" "}
+        The viewer, the Markdown tools and the PDF toolkit run in your browser or discard
+        their input immediately. Stored files live on this server&rsquo;s own disk, so
+        capacity is bounded by the volume it runs on rather than by a per-file cap. For
+        genuinely unbounded transfers, use{" "}
         <Link href="/p2p" className="underline underline-offset-2 hover:text-slate-700">
           direct transfer
         </Link>

@@ -99,11 +99,42 @@ Every setting is optional. See `.env.example`.
 | `SHARE_SECRET` | generated | Key for signing password-unlock cookies |
 | `CHROME_PATH` | auto-detected | Chromium executable used for PDF rendering |
 | `NEXT_PUBLIC_STUN_URLS` | Google, Twilio | Comma-separated STUN servers for direct transfer |
+| `NEXT_PUBLIC_SITE_URL` | detected | Public origin, used for canonical and Open Graph URLs |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | Listen address |
 
 If you run more than one instance behind a load balancer, set `SHARE_SECRET`
 explicitly so unlock cookies issued by one instance are accepted by the others,
 and give every instance the same `DATA_DIR`.
+
+### The site URL
+
+`NEXT_PUBLIC_SITE_URL` matters at **build** time, not run time: canonical and
+Open Graph tags are baked into the statically rendered pages. Render and Vercel
+are detected automatically (`RENDER_EXTERNAL_URL`, `VERCEL_URL`); anywhere else,
+set it during the build or those tags will point at `localhost`.
+
+`robots.txt` and `sitemap.xml` do not depend on it — they read the host from the
+request, so they are always correct for whatever domain is being crawled.
+
+## Search engines, sharing and browsers
+
+- Per-page titles and descriptions, canonical URLs, Open Graph and Twitter card
+  tags, and a link-preview image generated from the site copy so the two cannot
+  drift. The card is drawn with the bundled Liberation faces rather than a
+  downloaded font, so it renders identically offline.
+- `sitemap.xml` and `robots.txt`, both resolved against the requesting host.
+- JSON-LD describing the site and its tools.
+- A web manifest, so the app can be installed and opened in its own window.
+- Security headers on every response: `X-Content-Type-Options`,
+  `Referrer-Policy`, `X-Frame-Options` and a restrictive `Permissions-Policy`.
+- A skip link to the main content, for anyone navigating by keyboard.
+
+**Share links are kept out of all of it.** `/f/<id>` carries
+`noindex, nofollow, nocache`, is excluded from the sitemap and disallowed in
+`robots.txt`, and `Referrer-Policy` stops the link leaking to any site a
+document links out to. The link is the only thing protecting the file, so it is
+treated as a secret rather than as a page. `/uploads` is likewise not indexed:
+it is personal to one browser.
 
 ## About the size limit
 
