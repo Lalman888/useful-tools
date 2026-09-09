@@ -73,6 +73,42 @@ because of a missing setting:
 Both tools come back on their own the moment you run the app with its own
 server on a host that has a persistent volume — no configuration needed.
 
+### On Render specifically
+
+Render's native Node runtime has no browser on its image, so PDF export fails
+there with *"No Chromium executable found"*. The app is not serverless on
+Render — `isServerless()` is false, because Render sets none of the variables
+that identify a function environment — so it looks for a real Chromium and
+finds nothing. There are two ways out.
+
+**Use the Docker runtime.** This is the one to prefer. The `Dockerfile` in this
+repository installs Chromium and the document fonts, and sets `CHROME_PATH`, so
+nothing has to be configured in the dashboard. Set the service's Language to
+**Docker** (or import `render.yaml` as a Blueprint) and redeploy. The same
+image runs anywhere else that takes a container.
+
+**Or stay on the Node runtime and download Chrome at build time.** Change the
+build command to:
+
+```bash
+npm install && npx @puppeteer/browsers install chrome-headless-shell@stable --path ./.cache/puppeteer && npm run build
+```
+
+and set `PUPPETEER_CACHE_DIR` to `/opt/render/project/src/.cache/puppeteer`.
+The path matters: only the repository checkout survives from the build into the
+running service, so a download into the default `~/.cache` is gone by the time
+a request arrives. The app searches that cache and picks the newest build it
+finds, so no version number has to be written down anywhere. The headless shell
+is used rather than full Chrome because it is smaller and needs fewer shared
+libraries — which is also the weakness of this route, since the Node image
+supplies those libraries rather than the app, and a future image could stop.
+
+**Attach a disk either way.** Render gives a service a fresh filesystem on
+every deploy and restart, so without one, shared files and everything sent to a
+request link are deleted each time you push. Add a disk, mount it at
+`/var/data`, and set `DATA_DIR=/var/data`. Set `SHARE_SECRET` too, or a restart
+invalidates every unlock cookie already issued.
+
 ### On Vercel specifically
 
 It deploys as-is with no `vercel.json`. Vercel ignores `server.mjs` and serves
@@ -103,6 +139,7 @@ Every setting is optional. See `.env.example`.
 | `MAX_PARSE_BYTES` | `209715200` | Largest file the viewer will parse |
 | `SHARE_SECRET` | generated | Key for signing password-unlock cookies, for both share and request links |
 | `CHROME_PATH` | auto-detected | Chromium executable used for PDF rendering |
+| `PUPPETEER_CACHE_DIR` | `~/.cache/puppeteer` | Where to look for a Chrome installed by `@puppeteer/browsers` |
 | `NEXT_PUBLIC_STUN_URLS` | Google, Twilio | Comma-separated STUN servers for direct transfer |
 | `NEXT_PUBLIC_SITE_URL` | detected | Public origin, used for canonical and Open Graph URLs |
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | Listen address |

@@ -28,8 +28,55 @@ const CANDIDATE_PATHS = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 ].filter((p): p is string => Boolean(p));
 
+/**
+ * Chrome installed by `@puppeteer/browsers` rather than by the system package
+ * manager, as on a host with no Chromium on its image. It lands in a directory
+ * named after its exact version, so the path cannot be written down by hand
+ * without breaking at the next Chrome release — find the newest build instead.
+ */
+function downloadedChromeCandidates(): string[] {
+  const cache =
+    process.env.PUPPETEER_CACHE_DIR ?? path.join(os.homedir(), ".cache", "puppeteer");
+
+  // Relative to a version directory. The headless shell is a smaller build with
+  // fewer shared-library dependencies, and prints PDFs just as well.
+  const layouts: Array<[browser: string, executable: string]> = [
+    ["chrome-headless-shell", "chrome-headless-shell-linux64/chrome-headless-shell"],
+    ["chrome", "chrome-linux64/chrome"],
+    ["chrome", "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"],
+    ["chrome", "chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"],
+  ];
+
+  const found: Array<{ version: number[]; executable: string }> = [];
+  for (const [browser, executable] of layouts) {
+    let versions: string[];
+    try {
+      versions = fs.readdirSync(/* turbopackIgnore: true */ path.join(cache, browser));
+    } catch {
+      continue; // no such browser in the cache
+    }
+    for (const version of versions) {
+      found.push({
+        // "linux-140.0.7339.16" sorts as a string in the wrong order once the
+        // major number gains a digit, so compare the numbers themselves.
+        version: (version.split("-").pop() ?? "").split(".").map(Number),
+        executable: path.join(cache, browser, version, executable),
+      });
+    }
+  }
+
+  found.sort((a, b) => {
+    for (let i = 0; i < Math.max(a.version.length, b.version.length); i++) {
+      const difference = (b.version[i] ?? 0) - (a.version[i] ?? 0);
+      if (difference) return difference;
+    }
+    return 0;
+  });
+  return found.map((build) => build.executable);
+}
+
 function findChrome(): string {
-  for (const candidate of CANDIDATE_PATHS) {
+  for (const candidate of [...CANDIDATE_PATHS, ...downloadedChromeCandidates()]) {
     try {
       if (fs.statSync(/* turbopackIgnore: true */ candidate).isFile()) return candidate;
     } catch {
@@ -37,7 +84,9 @@ function findChrome(): string {
     }
   }
   throw new Error(
-    "No Chromium executable found. Install Chrome/Chromium and set CHROME_PATH to its location."
+    "No Chromium executable found. Install Chrome/Chromium and set CHROME_PATH to its " +
+      "location, or run `npx @puppeteer/browsers install chrome-headless-shell@stable` " +
+      "and set PUPPETEER_CACHE_DIR to where it was written."
   );
 }
 

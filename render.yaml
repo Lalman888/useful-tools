@@ -1,0 +1,32 @@
+# Render blueprint. Import it from the dashboard, or use it as a checklist for
+# a service you have already created by hand.
+services:
+  - type: web
+    name: useful-tools
+    # Docker rather than the native Node runtime, because the PDF exporter
+    # needs a Chromium on the image and the Node runtime has none.
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter # a disk cannot be attached to the free plan
+    healthCheckPath: /
+
+    # Shared files, and the files people send to a request link, live on this
+    # disk. Without it Render gives the service a fresh filesystem on every
+    # deploy and restart, so every link handed out would break.
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 10
+
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      # Signs the cookies issued when someone unlocks a password-protected
+      # file or request link. Generated on first use if unset, but then a
+      # restart invalidates every cookie already issued.
+      - key: SHARE_SECRET
+        generateValue: true
+      # Baked into canonical and Open Graph tags at build time, so it has to
+      # be the public URL rather than the internal one.
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
