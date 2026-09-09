@@ -9,6 +9,13 @@ const TOOLS = [
     detail: ".csv · .tsv · .xlsx · .xlsm",
   },
   {
+    href: "/preview",
+    title: "Markdown preview",
+    blurb:
+      "Paste Markdown and read it rendered, with proper typography, tables, code, maths and diagrams. No cover page, no contents list — just the document.",
+    detail: "Paste and read",
+  },
+  {
     href: "/markdown",
     title: "Markdown to PDF",
     blurb:

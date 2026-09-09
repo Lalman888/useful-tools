@@ -5,6 +5,7 @@ Four file tools in one small Next.js app:
 | Tool | Path | What it does |
 | --- | --- | --- |
 | Data viewer | `/viewer` | Reads CSV, TSV and Excel workbooks as a sortable, searchable table |
+| Markdown preview | `/preview` | Paste Markdown and read it rendered, with no cover page or contents list |
 | Markdown to PDF | `/markdown` | Typesets Markdown into a PDF with a cover, contents, headers and page numbers |
 | PDF toolkit | `/pdf` | Merge, extract, rotate and watermark PDFs, entirely in the browser |
 | Share a file | `/share` | Chunked resumable upload of any file, with a share link |
@@ -46,6 +47,7 @@ depends on where you run it.
 | | Serverless (Vercel, Netlify, Lambda) | A server with a disk (Docker, Fly, Railway, a VPS) |
 | --- | --- | --- |
 | Data viewer | Works | Works |
+| Markdown preview | Works | Works |
 | Markdown to PDF | Works | Works |
 | PDF toolkit | Works | Works |
 | Share a file | **Off** | Works |
@@ -133,6 +135,18 @@ virtualised, so a sheet with tens of thousands of rows still scrolls smoothly.
 
 Legacy `.xls`, `.ods` and `.xlsb` are not supported; the viewer says so and
 suggests re-saving as `.xlsx`.
+
+### Markdown preview
+
+Paste Markdown, read it rendered. It shares the Markdown engine and stylesheets
+with the exporter, so tables, highlighted code, maths and diagrams all appear
+exactly as they would in a PDF — but with no cover page and no contents list,
+which is what makes a quick look at a document quick.
+
+Two views: *Reading* drops the paper entirely and sets the text at a
+comfortable measure, and *Paper* shows the same document on sheets the size of
+the chosen page. The editor pane can be hidden to read full width, and a PDF of
+what you are looking at is one button away.
 
 ### Markdown to PDF
 

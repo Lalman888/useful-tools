@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const LINKS = [
   { href: "/viewer", label: "Data viewer" },
+  { href: "/preview", label: "Markdown preview" },
   { href: "/markdown", label: "Markdown to PDF" },
   { href: "/pdf", label: "PDF toolkit" },
   { href: "/share", label: "Share a file" },

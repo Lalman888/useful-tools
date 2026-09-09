@@ -306,7 +306,12 @@ function insertDiagrams(html: string, rendered: string[]): string {
  * exporter, so what the editor shows is what the PDF prints — apart from
  * pagination, which only Chromium's print layout can decide.
  */
-export async function renderPreviewDocument(options: PdfOptions): Promise<string> {
+export type PreviewLayout = "page" | "reading";
+
+export async function renderPreviewDocument(
+  options: PdfOptions,
+  layout: PreviewLayout = "page"
+): Promise<string> {
   const rendered = renderMarkdown(options.markdown);
   // Only drop the opening heading when the cover is actually using it. With an
   // explicit title — or several files, where the first heading is chapter one
@@ -335,7 +340,29 @@ export async function renderPreviewDocument(options: PdfOptions): Promise<string
   });
 
   const size = PAPER_SIZES[options.paper];
-  const previewCss = `
+
+  // "page" simulates sheets of paper, so the editor shows what will print.
+  // "reading" drops the paper entirely for someone who just wants to read the
+  // document on screen.
+  const previewCss =
+    layout === "reading"
+      ? `
+html { background: #fff; }
+body { padding: 0; }
+.reading {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 6rem;
+}
+/* A page break has no meaning outside paper; mark it as a section divider. */
+.page-break {
+  height: 0;
+  border-top: 1px dashed #cbd5e1;
+  margin: 2.5em 0;
+}
+.toc { break-after: auto; }
+`
+      : `
 html { background: #eceff3; }
 body { padding: 20px 16px 40px; }
 .sheet {
@@ -358,12 +385,21 @@ body { padding: 20px 16px 40px; }
 .toc { break-after: auto; }
 `;
 
-  const body = [
-    options.includeCover
-      ? `<div class="sheet sheet--cover">${coverHtml(options, rendered.inferredTitle)}</div>`
-      : "",
-    `<div class="sheet">${options.includeToc ? tocHtml(tocHeadings, null) : ""}<main class="doc">${contentHtml}</main></div>`,
-  ].join("");
+  const inner = `${options.includeToc ? tocHtml(tocHeadings, null) : ""}<main class="doc">${contentHtml}</main>`;
+
+  const body =
+    layout === "reading"
+      ? `${
+          options.includeCover
+            ? `<div class="reading">${coverHtml(options, rendered.inferredTitle)}</div>`
+            : ""
+        }<div class="reading">${inner}</div>`
+      : [
+          options.includeCover
+            ? `<div class="sheet sheet--cover">${coverHtml(options, rendered.inferredTitle)}</div>`
+            : "",
+          `<div class="sheet">${inner}</div>`,
+        ].join("");
 
   return documentShell(options, body, rendered.hasMath, previewCss);
 }

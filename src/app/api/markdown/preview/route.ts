@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { renderPreviewDocument } from "@/lib/pdf";
+import { renderPreviewDocument, type PreviewLayout } from "@/lib/pdf";
 import { parsePdfOptions } from "@/lib/pdfOptions";
 
 export const runtime = "nodejs";
@@ -23,7 +23,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error }, { status: parsed.status });
   }
 
-  return new NextResponse(await renderPreviewDocument(parsed.options), {
+  const layout: PreviewLayout = body.layout === "reading" ? "reading" : "page";
+
+  return new NextResponse(await renderPreviewDocument(parsed.options, layout), {
     status: 200,
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
   });
