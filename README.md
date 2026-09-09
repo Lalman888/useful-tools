@@ -245,3 +245,82 @@ negotiate a connection, and the file is sent with backpressure so the send
 buffer never grows unboundedly. If the peers cannot reach each other directly —
 a strict corporate firewall, for instance — the connection fails rather than
 falling back to a relay; there is no TURN server configured.
+
+## Planned
+
+None of the following is built yet. They are recorded here so the intent behind
+each is clear before anyone starts, and so the list does not get mistaken for a
+description of what the app currently does.
+
+### Shareable preview links
+
+Today the Markdown preview is private to your browser: you paste something, you
+read it, and that is the end of it. Sending it to somebody means exporting a PDF
+or pasting the source and asking them to render it themselves.
+
+The idea is a **Share** button on `/preview` that stores the Markdown and hands
+back a link. Opening that link shows the *rendered document* — no editor, no
+toolbar, nothing to configure — so the person receiving it reads a page rather
+than a file they must first do something with. It is the difference between a
+scratchpad and something you can put in a message.
+
+Because it stores content on the server, it belongs to the same machinery as
+file sharing: the same expiry, password and revoke options, listed alongside
+uploads in `/uploads`, and unavailable on a deployment with no writable disk.
+Like a share link, the URL would be the only thing protecting it, so it would
+carry the same `noindex` treatment.
+
+### Diff two spreadsheets
+
+Comparing two versions of the same sheet — last month's export against this
+one, a colleague's copy against yours — is currently a manual job, and the
+viewer does not help with it at all.
+
+The idea is to open two files, choose a column that identifies a row (an id, an
+email, a SKU), and get a report of what changed: rows added, rows removed, and
+rows where a value moved, with the changed cells highlighted and the old and new
+values shown side by side. Columns that appear in one file and not the other get
+called out too, since a changed export format is a common reason two sheets stop
+matching.
+
+Everything needed for this already exists — the parsers, the virtualised grid,
+the value coercion that knows `1,200` and `$1,200` are the same number — so the
+work is mostly the matching logic and a way to present it. Nothing else in this
+app does it, which is what makes it worth building.
+
+### Export to DOCX and HTML
+
+The Markdown studio produces PDFs, and a PDF is final. That is right for
+sending something out, and wrong when the person receiving it has to edit it,
+comment on it, or put it through a review process that runs on tracked changes.
+
+Two more outputs would cover that:
+
+- **DOCX**, for anyone who needs to edit the result in Word or Google Docs.
+  Headings, tables, lists, code blocks and images would map onto real Word
+  styles rather than a flat blob of text, so the document stays editable and
+  restyleable at the other end.
+- **Standalone HTML**, a single file with the stylesheet, fonts and diagrams
+  inlined. Nothing to serve and nothing to fetch, so it can be emailed, dropped
+  on a static host, or opened straight from disk and still look the same.
+
+Both would reuse the existing theme stylesheets, so a document exported three
+ways would look like three versions of one thing rather than three different
+documents.
+
+### Table of figures
+
+Long documents refer to their own contents — "see Figure 3", "the totals in
+Table 2" — and doing that by hand breaks the moment anything is inserted
+above.
+
+The idea is to number captioned images, tables and diagrams automatically, and
+to list them after the contents with the page each one falls on. The page
+numbers would be resolved the same way the contents list already resolves its
+own: render once, read back from the PDF where everything landed, then render
+again with the numbers filled in. Cross-references in the text would pick up the
+same numbers, so inserting a figure halfway through renumbers everything that
+follows rather than leaving the prose wrong.
+
+This matters mainly for reports and papers — the same documents that already
+want the cover, the contents and the section numbering.
