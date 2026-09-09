@@ -9,7 +9,7 @@ export const SITE_TAGLINE = "File tools that stay out of your way";
 
 export const SITE_DESCRIPTION =
   "Read CSV and Excel files as a real table, preview Markdown, turn it into a typeset PDF, " +
-  "merge and split PDFs, and share any file with no size limit — most of it without the file " +
+  "merge and split PDFs, and send or receive files of any size — most of it without the file " +
   "ever leaving your browser.";
 
 /**
@@ -116,6 +116,14 @@ export const TOOLS: ToolPage[] = [
     description:
       "Upload anything and get a link. Uploads are chunked and resumable with no size limit in the app, and you can add an expiry, a password or a download cap.",
     detail: "Any file type · resumable",
+    indexable: true,
+  },
+  {
+    href: "/request",
+    name: "Request files",
+    description:
+      "Send someone a link and they can upload files to you — no account and nothing to install on their side. Set how many files you will take, when the link stops working, and a password if it matters.",
+    detail: "They send · you receive",
     indexable: true,
   },
   {

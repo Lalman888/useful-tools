@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createUpload } from "@/lib/storage";
 import { storageUnavailableResponse } from "@/lib/storageGuard";
 import { CHUNK_SIZE, MAX_FILE_SIZE, DEFAULT_EXPIRY_HOURS } from "@/lib/config";
+import { isOpen, readRequest } from "@/lib/requests";
+import { cookieFrom, requestCookieName, verifyAccess } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +15,8 @@ type InitBody = {
   expiresInHours?: unknown;
   maxDownloads?: unknown;
   password?: unknown;
+  requestId?: unknown;
+  submitter?: unknown;
 };
 
 function asNumber(value: unknown): number | null {
@@ -48,6 +52,28 @@ export async function POST(request: Request) {
     );
   }
 
+  // An upload aimed at a request link is checked here, before a single byte is
+  // accepted, so a closed or full request cannot be used as free storage.
+  const requestId = typeof body.requestId === "string" ? body.requestId : "";
+  if (requestId) {
+    const fileRequest = await readRequest(requestId);
+    if (!fileRequest) {
+      return NextResponse.json({ error: "This request link no longer exists." }, { status: 404 });
+    }
+    if (!isOpen(fileRequest)) {
+      return NextResponse.json(
+        { error: "This request is no longer accepting files." },
+        { status: 410 }
+      );
+    }
+    if (fileRequest.passwordHash) {
+      const cookie = cookieFrom(request.headers.get("cookie"), requestCookieName(requestId));
+      if (!verifyAccess(`request:${requestId}`, cookie)) {
+        return NextResponse.json({ error: "Password required." }, { status: 401 });
+      }
+    }
+  }
+
   const expiresRaw = asNumber(body.expiresInHours);
   const meta = await createUpload({
     name,
@@ -57,11 +83,17 @@ export async function POST(request: Request) {
     maxDownloads: asNumber(body.maxDownloads),
     password:
       typeof body.password === "string" && body.password.length > 0 ? body.password : null,
+    ...(requestId ? { requestId } : {}),
+    ...(typeof body.submitter === "string" && body.submitter.trim()
+      ? { submitter: body.submitter }
+      : {}),
   });
 
   return NextResponse.json({
     id: meta.id,
     chunkSize: CHUNK_SIZE,
-    deleteToken: meta.deleteToken,
+    // Withheld for a submission: the sender is giving the file away, and a
+    // delete token would let them pull it back after the owner had seen it.
+    ...(requestId ? {} : { deleteToken: meta.deleteToken }),
   });
 }

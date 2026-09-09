@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { blobPath, isExpired, readMeta } from "@/lib/storage";
-import { accessCookieName, verifyAccess } from "@/lib/auth";
+import { accessCookieName, cookieFrom, verifyAccess } from "@/lib/auth";
+import { ownerTokenAllows } from "@/lib/requests";
 import { parseWorkbook, UnsupportedFormatError } from "@/lib/spreadsheet";
 import { MAX_PARSE_BYTES, formatBytes } from "@/lib/config";
 
@@ -17,13 +18,16 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.json({ error: "File not found." }, { status: 404 });
   }
   if (meta.passwordHash) {
-    const cookie = request.headers
-      .get("cookie")
-      ?.split(";")
-      .map((part) => part.trim().split("="))
-      .find(([key]) => key === accessCookieName(id))?.[1];
+    const cookie = cookieFrom(request.headers.get("cookie"), accessCookieName(id));
     if (!verifyAccess(id, cookie)) {
       return NextResponse.json({ error: "Password required." }, { status: 401 });
+    }
+  }
+  // Previewing is reading: a submitted file stays the request owner's alone.
+  if (meta.requestId) {
+    const token = new URL(request.url).searchParams.get("owner");
+    if (!(await ownerTokenAllows(meta.requestId, token))) {
+      return NextResponse.json({ error: "File not found." }, { status: 404 });
     }
   }
   if (meta.size > MAX_PARSE_BYTES) {

@@ -1,6 +1,6 @@
 # Useful Tools
 
-Four file tools in one small Next.js app:
+A handful of file tools in one small Next.js app:
 
 | Tool | Path | What it does |
 | --- | --- | --- |
@@ -9,6 +9,7 @@ Four file tools in one small Next.js app:
 | Markdown to PDF | `/markdown` | Typesets Markdown into a PDF with a cover, contents, headers and page numbers |
 | PDF toolkit | `/pdf` | Merge, extract, rotate and watermark PDFs, entirely in the browser |
 | Share a file | `/share` | Chunked resumable upload of any file, with a share link |
+| Request files | `/request` | A link that lets somebody else upload *to you*, with limits you set |
 | My uploads | `/uploads` | The links you have created, with copy and revoke |
 | Direct transfer | `/p2p` | Browser-to-browser transfer over WebRTC; nothing is stored |
 
@@ -41,8 +42,8 @@ connect.
 
 ## Deploying
 
-The four tools do not all need the same things from a host, so what you get
-depends on where you run it.
+The tools do not all need the same things from a host, so what you get depends
+on where you run it.
 
 | | Serverless (Vercel, Netlify, Lambda) | A server with a disk (Docker, Fly, Railway, a VPS) |
 | --- | --- | --- |
@@ -51,12 +52,14 @@ depends on where you run it.
 | Markdown to PDF | Works | Works |
 | PDF toolkit | Works | Works |
 | Share a file | **Off** | Works |
+| Request files | **Off** | Works |
 | Direct transfer | **Off** | Works |
 
 The two that switch off do so because of what serverless hosting is, not
 because of a missing setting:
 
-- **Sharing** needs a writable disk whose contents survive between requests.
+- **Sharing and file requests** need a writable disk whose contents survive
+  between requests.
   A serverless function gets a read-only application directory and a `/tmp`
   that is discarded, and the next request may land on a different instance
   entirely, so a share link would break the moment it was handed over. The app
@@ -94,9 +97,11 @@ Every setting is optional. See `.env.example`.
 | `MAX_FILE_SIZE` | `0` | Per-file ceiling in bytes; `0` means no limit |
 | `CHUNK_SIZE` | `8388608` | Upload chunk size in bytes |
 | `DEFAULT_EXPIRY_HOURS` | `0` | Default link lifetime; `0` means links never expire |
+| `MAX_REQUEST_FILES` | `25` | Ceiling on how many files one request link will accept |
+| `DEFAULT_REQUEST_EXPIRY_HOURS` | `336` | Default lifetime of a request link; `0` means never |
 | `MAX_PREVIEW_ROWS` | `50000` | Row cap for a spreadsheet preview |
 | `MAX_PARSE_BYTES` | `209715200` | Largest file the viewer will parse |
-| `SHARE_SECRET` | generated | Key for signing password-unlock cookies |
+| `SHARE_SECRET` | generated | Key for signing password-unlock cookies, for both share and request links |
 | `CHROME_PATH` | auto-detected | Chromium executable used for PDF rendering |
 | `NEXT_PUBLIC_STUN_URLS` | Google, Twilio | Comma-separated STUN servers for direct transfer |
 | `NEXT_PUBLIC_SITE_URL` | detected | Public origin, used for canonical and Open Graph URLs |
@@ -237,6 +242,29 @@ until the password is given.
 
 Anything not on a short list of safe types is served as an attachment rather
 than inline, so an uploaded `.html` or `.svg` can never execute on this origin.
+
+### Request files
+
+The mirror image of a share link, and the security model is inverted with it. A
+share link lets whoever holds it *read* one file, so the link itself is the
+secret. A request link lets whoever holds it *write*, and anyone you send it to
+can pass it on, so it cannot rely on staying secret: it carries hard limits
+instead — an expiry, a ceiling on how many files it will take, an optional
+password, and a switch to close it.
+
+Reading what arrives needs the owner token, a random value handed back once at
+creation and kept in this browser's `localStorage`. The server never ties it to
+an account, so the person who made the request is the only one who can list the
+submissions or download them — the sender cannot even fetch back the file they
+just sent, and neither can anybody else holding its id. Clearing the browser
+loses that access for good, which is the cost of not having accounts.
+
+Two smaller decisions follow from the same reasoning. The request is checked for
+being open *before* the first chunk is accepted, so a closed or full request
+cannot be used as free storage. And the submission is recorded by the server
+when the upload completes rather than by the client afterwards, so a sender who
+closes the tab the moment the last chunk lands still shows up in the owner's
+list rather than leaving an orphaned file on disk.
 
 ### Direct transfer
 

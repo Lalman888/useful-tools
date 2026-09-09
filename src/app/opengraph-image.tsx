@@ -99,7 +99,7 @@ export default function OpenGraphImage() {
         </div>
 
         <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
-          {["CSV & Excel viewer", "Markdown to PDF", "PDF toolkit", "File sharing"].map(
+          {["CSV & Excel viewer", "Markdown to PDF", "PDF toolkit", "Send & receive files"].map(
             (label) => (
               <div
                 key={label}

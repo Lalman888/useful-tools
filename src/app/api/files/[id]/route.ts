@@ -9,7 +9,8 @@ import {
   recordDownload,
   tokensMatch,
 } from "@/lib/storage";
-import { accessCookieName, verifyAccess } from "@/lib/auth";
+import { accessCookieName, cookieFrom, verifyAccess } from "@/lib/auth";
+import { ownerTokenAllows } from "@/lib/requests";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,13 +55,17 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.json({ error: "This link has expired." }, { status: 410 });
   }
   if (meta.passwordHash) {
-    const cookie = request.headers
-      .get("cookie")
-      ?.split(";")
-      .map((part) => part.trim().split("="))
-      .find(([key]) => key === accessCookieName(id))?.[1];
+    const cookie = cookieFrom(request.headers.get("cookie"), accessCookieName(id));
     if (!verifyAccess(id, cookie)) {
       return NextResponse.json({ error: "Password required." }, { status: 401 });
+    }
+  }
+  // A file sent through a request link is not a share link: possession of the
+  // id is not permission to read it. Only the person who made the request can.
+  if (meta.requestId) {
+    const token = new URL(request.url).searchParams.get("owner");
+    if (!(await ownerTokenAllows(meta.requestId, token))) {
+      return NextResponse.json({ error: "File not found." }, { status: 404 });
     }
   }
 

@@ -2,6 +2,10 @@ export type UploadSettings = {
   expiresInHours: number | null;
   maxDownloads: number | null;
   password: string | null;
+  /** Set when the file is being sent to somebody else's request link. */
+  requestId?: string;
+  /** Who the file is from, as typed by the sender. */
+  submitter?: string;
 };
 
 export type UploadProgress = {
@@ -35,7 +39,7 @@ export async function uploadFile(
   settings: UploadSettings,
   onProgress: (progress: UploadProgress) => void,
   signal: AbortSignal
-): Promise<{ id: string; deleteToken: string }> {
+): Promise<{ id: string; deleteToken?: string }> {
   const initResponse = await fetch("/api/upload/init", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -46,16 +50,20 @@ export async function uploadFile(
       expiresInHours: settings.expiresInHours,
       maxDownloads: settings.maxDownloads,
       password: settings.password,
+      requestId: settings.requestId,
+      submitter: settings.submitter,
     }),
     signal,
   });
   if (!initResponse.ok) {
     throw new Error(await readError(initResponse, "Could not start the upload."));
   }
+  // No delete token comes back for a submission: giving a file away is not
+  // meant to be undoable by the sender.
   const { id, chunkSize, deleteToken } = (await initResponse.json()) as {
     id: string;
     chunkSize: number;
-    deleteToken: string;
+    deleteToken?: string;
   };
 
   let offset = 0;

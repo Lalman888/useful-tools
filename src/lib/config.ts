@@ -14,6 +14,9 @@ export const DATA_DIR = process.env.DATA_DIR
 
 export const FILES_DIR = path.join(DATA_DIR, "files");
 
+/** File requests: a link someone else uploads to. */
+export const REQUESTS_DIR = path.join(DATA_DIR, "requests");
+
 /**
  * Hard ceiling on a single upload, in bytes. `0` means no limit, which is the
  * default: uploads are streamed to disk in chunks, so the only real bound is
@@ -28,6 +31,15 @@ export const CHUNK_SIZE = intFromEnv("CHUNK_SIZE", 8 * 1024 * 1024);
  * Default lifetime for a share link, in hours. `0` means links never expire.
  */
 export const DEFAULT_EXPIRY_HOURS = intFromEnv("DEFAULT_EXPIRY_HOURS", 0);
+
+/**
+ * How many files one request will accept. A request link is handed to people
+ * outside your control, so it needs a ceiling it cannot be talked out of.
+ */
+export const MAX_REQUEST_FILES = intFromEnv("MAX_REQUEST_FILES", 25);
+
+/** Default lifetime of a request link, in hours. `0` means it never expires. */
+export const DEFAULT_REQUEST_EXPIRY_HOURS = intFromEnv("DEFAULT_REQUEST_EXPIRY_HOURS", 336);
 
 /** Cap on rows returned to the spreadsheet viewer in one response. */
 export const MAX_PREVIEW_ROWS = intFromEnv("MAX_PREVIEW_ROWS", 50_000);

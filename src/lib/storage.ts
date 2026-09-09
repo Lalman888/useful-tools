@@ -3,7 +3,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { customAlphabet } from "nanoid";
-import { DATA_DIR, FILES_DIR } from "./config";
+import { DATA_DIR, FILES_DIR, REQUESTS_DIR } from "./config.ts";
 
 /** Unambiguous alphabet: no look-alike characters, so ids survive being read aloud. */
 const ID_ALPHABET = "0123456789abcdefghijkmnpqrstuvwxyz";
@@ -22,6 +22,10 @@ export type FileMeta = {
   passwordHash: string | null;
   deleteToken: string;
   complete: boolean;
+  /** Set when the file arrived through a request link rather than an upload. */
+  requestId?: string;
+  /** Name the sender gave, when they arrived through a request. */
+  submitter?: string;
 };
 
 // Built from the alphabet itself: a hand-written character class silently
@@ -84,6 +88,8 @@ export type CreateUploadInput = {
   expiresInHours: number | null;
   maxDownloads: number | null;
   password: string | null;
+  requestId?: string;
+  submitter?: string;
 };
 
 export async function createUpload(input: CreateUploadInput): Promise<FileMeta> {
@@ -107,6 +113,8 @@ export async function createUpload(input: CreateUploadInput): Promise<FileMeta> 
     passwordHash: input.password ? hashPassword(input.password) : null,
     deleteToken: crypto.randomBytes(24).toString("base64url"),
     complete: false,
+    ...(input.requestId ? { requestId: input.requestId } : {}),
+    ...(input.submitter ? { submitter: sanitizeName(input.submitter) } : {}),
   };
   await writeMeta(meta);
   return meta;
@@ -240,6 +248,7 @@ export function ensureDirs(): { writable: boolean; reason: string } {
   if (storageState) return storageState;
   try {
     fs.mkdirSync(FILES_DIR, { recursive: true });
+    fs.mkdirSync(REQUESTS_DIR, { recursive: true });
     // Creating the directory is not proof we can write into it.
     const probe = path.join(FILES_DIR, ".write-probe");
     fs.writeFileSync(probe, "");

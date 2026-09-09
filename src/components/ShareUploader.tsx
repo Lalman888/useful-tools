@@ -91,11 +91,13 @@ export function ShareUploader() {
             }),
           controller.signal
         );
-        rememberUpload({
-          id: result.id,
-          name: item.file.name,
-          deleteToken: result.deleteToken,
-        });
+        if (result.deleteToken) {
+          rememberUpload({
+            id: result.id,
+            name: item.file.name,
+            deleteToken: result.deleteToken,
+          });
+        }
         update(item.key, {
           status: "done",
           uploaded: item.file.size,

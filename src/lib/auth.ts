@@ -33,6 +33,19 @@ export function accessCookieName(id: string): string {
   return `ut_access_${id}`;
 }
 
+/** A request link's unlock cookie, kept distinct from a share link's. */
+export function requestCookieName(id: string): string {
+  return `ut_request_${id}`;
+}
+
+/** Reads one cookie out of a raw Cookie header. */
+export function cookieFrom(header: string | null, name: string): string | undefined {
+  return header
+    ?.split(";")
+    .map((part) => part.trim().split("="))
+    .find(([key]) => key === name)?.[1];
+}
+
 export function signAccess(id: string): string {
   return crypto.createHmac("sha256", getSecret()).update(`access:${id}`).digest("base64url");
 }
