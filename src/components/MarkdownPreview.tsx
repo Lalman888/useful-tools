@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { THEMES, type ThemeId } from "@/lib/themes";
+import { safeFilename, suggestFilename } from "@/lib/filename";
 import { Alert, Button, Spinner, cx } from "./ui";
 
 const STORAGE_KEY = "useful-tools:markdown-preview";
@@ -26,6 +27,8 @@ export function MarkdownPreview() {
   const [exporting, setExporting] = useState(false);
   const [restored, setRestored] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Empty means "follow the document's own first heading".
+  const [fileName, setFileName] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -120,6 +123,13 @@ export function MarkdownPreview() {
     void file.text().then(setMarkdown);
   }, []);
 
+  // The exporter titles the PDF from the first heading, so the name offered
+  // here is read from the same place rather than guessing differently.
+  const suggestedName = useMemo(() => {
+    const heading = markdown.match(/^#\s+(.+)$/m)?.[1] ?? "";
+    return suggestFilename(heading.trim() || "document", ".pdf");
+  }, [markdown]);
+
   const downloadPdf = async () => {
     setExporting(true);
     setError(null);
@@ -137,7 +147,7 @@ export function MarkdownPreview() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "document.pdf";
+      anchor.download = safeFilename(fileName || suggestedName, ".pdf");
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     } catch (err) {
@@ -242,6 +252,15 @@ export function MarkdownPreview() {
           <Button size="sm" variant="ghost" onClick={() => setMarkdown("")} disabled={empty}>
             Clear
           </Button>
+          <input
+            value={fileName}
+            onChange={(event) => setFileName(event.target.value)}
+            placeholder={suggestedName}
+            spellCheck={false}
+            aria-label="File name for the exported PDF"
+            title="Name the PDF will be saved as"
+            className="w-36 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-slate-900 focus:ring-1 focus:ring-slate-900 focus:outline-none"
+          />
           <Button size="sm" variant="primary" onClick={downloadPdf} disabled={empty || exporting}>
             {exporting ? <Spinner /> : null} PDF
           </Button>

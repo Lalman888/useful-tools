@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { THEMES, type ThemeId } from "@/lib/themes";
+import { safeFilename, suggestFilename } from "@/lib/filename";
 import { Alert, Button, Checkbox, Field, Spinner, TextInput, cx, inputClass } from "./ui";
 
 const SAMPLE = `# Quarterly Platform Review
@@ -138,6 +139,9 @@ export function MarkdownStudio() {
   const [preview, setPreview] = useState("");
   const [previewing, setPreviewing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // Empty means "follow the title", so the suggestion keeps up with the
+  // document until the moment somebody states a name of their own.
+  const [fileName, setFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   const previewBox = useRef<HTMLDivElement>(null);
@@ -256,6 +260,15 @@ export function MarkdownStudio() {
     };
   }, [payload, markdown]);
 
+  // The exporter titles the PDF from the Title field, or from the first heading
+  // when that is blank. The name offered has to follow the same rule, or a
+  // document nobody retitled saves as "document.pdf" while calling itself
+  // something else on its own cover page.
+  const suggestedName = useMemo(() => {
+    const heading = markdown.match(/^#\s+(.+)$/m)?.[1] ?? "";
+    return suggestFilename(options.title.trim() || heading.trim() || "document", ".pdf");
+  }, [markdown, options.title]);
+
   const exportPdf = async () => {
     setExporting(true);
     setError(null);
@@ -273,7 +286,7 @@ export function MarkdownStudio() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `${(options.title || "document").replace(/[^\w\s.-]/g, "").trim() || "document"}.pdf`;
+      anchor.download = safeFilename(fileName || suggestedName, ".pdf");
       anchor.click();
       // Revoke on the next tick so the download has started.
       setTimeout(() => URL.revokeObjectURL(url), 4000);
@@ -457,6 +470,15 @@ export function MarkdownStudio() {
       {/* ------------------------------ controls ----------------------------- */}
       <aside className="flex flex-col gap-5 overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 lg:h-[calc(100vh-12rem)]">
         {error && <Alert>{error}</Alert>}
+
+        <Field label="Save as" hint="Leave blank to use the document title.">
+          <TextInput
+            value={fileName}
+            onChange={(event) => setFileName(event.target.value)}
+            placeholder={suggestedName}
+            spellCheck={false}
+          />
+        </Field>
 
         <Button variant="primary" onClick={exportPdf} disabled={exporting || !markdown.trim()}>
           {exporting ? <Spinner /> : null}

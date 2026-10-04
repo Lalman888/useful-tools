@@ -5,6 +5,8 @@ A handful of file tools in one small Next.js app:
 | Tool | Path | What it does |
 | --- | --- | --- |
 | Data viewer | `/viewer` | Reads CSV, TSV and Excel workbooks as a sortable, searchable table |
+| Word viewer | `/word` | Opens a .docx in the browser and reads it out as Markdown or PDF |
+| Live text | `/text` | Shows pasted text back exactly as pasted, with an option to hide .env values |
 | Markdown preview | `/preview` | Paste Markdown and read it rendered, with no cover page or contents list |
 | Markdown to PDF | `/markdown` | Typesets Markdown into a PDF with a cover, contents, headers and page numbers |
 | PDF toolkit | `/pdf` | Merge, extract, rotate and watermark PDFs, entirely in the browser |
@@ -48,6 +50,8 @@ on where you run it.
 | | Serverless (Vercel, Netlify, Lambda) | A server with a disk (Docker, Fly, Railway, a VPS) |
 | --- | --- | --- |
 | Data viewer | Works | Works |
+| Word viewer | Works | Works |
+| Live text | Works | Works |
 | Markdown preview | Works | Works |
 | Markdown to PDF | Works | Works |
 | PDF toolkit | Works | Works |
@@ -209,6 +213,45 @@ virtualised, so a sheet with tens of thousands of rows still scrolls smoothly.
 Legacy `.xls`, `.ods` and `.xlsb` are not supported; the viewer says so and
 suggests re-saving as `.xlsx`.
 
+### Word viewer
+
+A .docx is a zip of XML, so mammoth opens it in the browser and the document is
+never uploaded. What comes back is HTML generated from a file somebody else
+wrote, which makes it untrusted: it is run through DOMPurify against a small
+allow-list before it reaches the page, so no script, style, embedded object or
+`javascript:` link survives. The Markdown export is sanitised too — it is a
+second representation of the same untrusted document, and the file you download
+can be opened by something with no sanitiser of its own.
+
+Word's page layout is not reproduced: page breaks, exact margins, headers and
+footers are Word's, not the document's. Text, headings, lists, tables, images
+and links are. Anything mammoth could not represent is listed above the
+document rather than dropped silently. The old binary `.doc` format is a
+different thing entirely and is rejected with an explanation rather than a zip
+error.
+
+Both exports reuse the pipelines already here: Markdown feeds straight into
+Markdown to PDF, and the PDF button goes through the same typesetter as
+everything else.
+
+### Live text
+
+Paste anything — an `.env`, a config block, a log, a key — and read it back
+exactly as pasted. Nothing is parsed, formatted, wrapped or highlighted: the
+text goes into the page as a single text node inside a `<pre>`, so every space,
+tab, blank line and stray character survives and nothing in it is ever
+interpreted as markup. The page's own colours are the only thing that differs
+from the source.
+
+It is sized for reading off a screen, with the text size, wrapping and line
+numbers adjustable. **Hide values** masks the right-hand side of `KEY=value`
+lines, keeping the key, the quoting and the length, so you can show the shape of
+an `.env` to somebody without showing the secrets — and the page says plainly
+that it is doing so, because that view is no longer what you pasted.
+
+Nothing is uploaded. The text is kept in this browser so a reload does not lose
+what you were showing somebody.
+
 ### Markdown preview
 
 Paste Markdown, read it rendered. It shares the Markdown engine and stylesheets
@@ -269,6 +312,21 @@ fetch anything at render time; a URL is rejected rather than fetched.
 The opening heading is only dropped when the cover is actually using it. With
 an explicit title set — or several files, where the first heading is chapter one
 rather than the document title — it is kept.
+
+### Naming what you save
+
+Everywhere this app hands you a file — the PDF from Markdown to PDF or from the
+preview, each tool in the PDF toolkit, and both exports from the Word viewer —
+there is a **Save as** field. Leave it blank and it uses the name shown as the
+placeholder, derived from the document's title or the file it came from; type
+one and that is what you get.
+
+The rules behind it are shared, so no two places disagree: a name is stripped of
+characters a filesystem would reject, a pasted path contributes only its last
+segment, the extension is added but never doubled if you typed it yourself,
+trailing dots and spaces go (Windows would drop them silently and change the
+name after the fact), Windows device names like `nul` are refused, and an empty
+or unusable name falls back rather than producing a file called nothing.
 
 ### Share a file
 

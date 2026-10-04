@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { markdownToPdf } from "@/lib/pdf";
 import { parsePdfOptions } from "@/lib/pdfOptions";
+import { suggestFilename } from "@/lib/filename";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,9 @@ export async function POST(request: Request) {
 
   try {
     const result = await markdownToPdf(parsed.options);
-    const filename = `${result.title.replace(/[^\w\s.-]/g, "").trim() || "document"}.pdf`;
+    // Only reached by a direct POST; the browser download is named client-side.
+    // Same helper either way, so the two cannot disagree about the rules.
+    const filename = suggestFilename(result.title, ".pdf");
     return new NextResponse(result.bytes as unknown as BodyInit, {
       status: 200,
       headers: {

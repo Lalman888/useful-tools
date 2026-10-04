@@ -11,6 +11,7 @@ import {
   type SourceFile,
 } from "@/lib/pdfTools";
 import { triggerDownload } from "@/lib/xlsxExport";
+import { safeFilename, suggestFilename } from "@/lib/filename";
 import { Alert, Button, Field, Spinner, TextInput, cx, inputClass } from "./ui";
 
 type Tool = "merge" | "extract" | "rotate" | "watermark";
@@ -67,6 +68,8 @@ export function PdfToolkit() {
   const [color, setColor] = useState("#1f4e79");
   const [angle, setAngle] = useState(45);
   const [busy, setBusy] = useState(false);
+  // Empty means "use the name the tool would pick itself".
+  const [fileName, setFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -119,6 +122,18 @@ export function PdfToolkit() {
     });
   };
 
+  // What each tool would call its output, so the field can show it as a
+  // placeholder and the download can fall back to it.
+  const suggestedName = (() => {
+    const base = files[0] ? suggestFilename(files[0].name, "") : "";
+    if (tool === "merge") return "merged.pdf";
+    if (!base) return "document.pdf";
+    const suffix = tool === "extract" ? "pages" : tool === "rotate" ? "rotated" : "watermarked";
+    return `${base}-${suffix}.pdf`;
+  })();
+
+  const saveName = () => safeFilename(fileName || suggestedName, ".pdf");
+
   const run = async () => {
     setBusy(true);
     setError(null);
@@ -126,24 +141,23 @@ export function PdfToolkit() {
     try {
       const first = files[0];
       if (!first) throw new PdfToolError("Choose a PDF first.");
-      const base = first.name.replace(/\.pdf$/i, "");
 
       if (tool === "merge") {
         const bytes = await mergePdfs(files);
-        triggerDownload(new Blob([bytes as BlobPart], { type: "application/pdf" }), "merged.pdf");
+        triggerDownload(new Blob([bytes as BlobPart], { type: "application/pdf" }), saveName());
         setDone(`Merged ${files.length} files into one PDF.`);
       } else if (tool === "extract") {
         const { bytes, count } = await extractPages(first, selection);
         triggerDownload(
           new Blob([bytes as BlobPart], { type: "application/pdf" }),
-          `${base}-pages.pdf`
+          saveName()
         );
         setDone(`Extracted ${count} page${count === 1 ? "" : "s"}.`);
       } else if (tool === "rotate") {
         const bytes = await rotatePages(first, selection, turn);
         triggerDownload(
           new Blob([bytes as BlobPart], { type: "application/pdf" }),
-          `${base}-rotated.pdf`
+          saveName()
         );
         setDone(`Rotated by ${turn}°.`);
       } else {
@@ -156,7 +170,7 @@ export function PdfToolkit() {
         });
         triggerDownload(
           new Blob([bytes as BlobPart], { type: "application/pdf" }),
-          `${base}-watermarked.pdf`
+          saveName()
         );
         setDone("Watermark applied.");
       }
@@ -394,6 +408,15 @@ export function PdfToolkit() {
             </Field>
           </>
         )}
+
+        <Field label="Save as" hint="Leave blank to use the suggested name.">
+          <TextInput
+            value={fileName}
+            onChange={(event) => setFileName(event.target.value)}
+            placeholder={suggestedName}
+            spellCheck={false}
+          />
+        </Field>
 
         <Button variant="primary" className="w-full" disabled={!ready || busy} onClick={run}>
           {busy ? <Spinner /> : null}

@@ -87,6 +87,22 @@ export const TOOLS: ToolPage[] = [
     indexable: true,
   },
   {
+    href: "/word",
+    name: "Word viewer",
+    description:
+      "Open a .docx and read it without Word installed — headings, lists, tables and images included. Parsed in your browser, so the document is never uploaded, and it comes out again as Markdown or a typeset PDF.",
+    detail: ".docx · nothing uploaded",
+    indexable: true,
+  },
+  {
+    href: "/text",
+    name: "Live text",
+    description:
+      "Paste anything and read it back exactly as pasted — every space, tab and blank line intact, nothing reformatted or highlighted. Sized for reading off a screen, and it can hide the values in an .env before you show it to anybody.",
+    detail: "Verbatim · nothing uploaded",
+    indexable: true,
+  },
+  {
     href: "/preview",
     name: "Markdown preview",
     description:
