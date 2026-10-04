@@ -6,7 +6,7 @@ A handful of file tools in one small Next.js app:
 | --- | --- | --- |
 | Data viewer | `/viewer` | Reads CSV, TSV and Excel workbooks as a sortable, searchable table |
 | Word viewer | `/word` | Opens a .docx in the browser and reads it out as Markdown or PDF |
-| Live text | `/text` | Shows pasted text back exactly as pasted, with an option to hide .env values |
+| Live text | `/text` | Shows pasted text back exactly as pasted, and shares it live over a link |
 | Markdown preview | `/preview` | Paste Markdown and read it rendered, with no cover page or contents list |
 | Markdown to PDF | `/markdown` | Typesets Markdown into a PDF with a cover, contents, headers and page numbers |
 | PDF toolkit | `/pdf` | Merge, extract, rotate and watermark PDFs, entirely in the browser |
@@ -51,7 +51,7 @@ on where you run it.
 | --- | --- | --- |
 | Data viewer | Works | Works |
 | Word viewer | Works | Works |
-| Live text | Works | Works |
+| Live text | Works (**sharing off**) | Works |
 | Markdown preview | Works | Works |
 | Markdown to PDF | Works | Works |
 | PDF toolkit | Works | Works |
@@ -69,6 +69,9 @@ because of a missing setting:
   entirely, so a share link would break the moment it was handed over. The app
   detects this at startup, the upload endpoints answer `503`, and the page says
   so instead of failing mid-upload.
+- **Live text sharing** needs both: somewhere to keep the session, and a socket
+  to carry the keystrokes. The page itself still works serverless — paste, read,
+  mask, download — but the *Start sharing* button is disabled and says why.
 - **Direct transfer** needs a WebSocket held open by a long-running process to
   introduce the two browsers. Functions cannot hold one. `server.mjs` sets
   `HAS_SIGNALING`, and the page reports the feature as unavailable when it is
@@ -138,6 +141,8 @@ Every setting is optional. See `.env.example`.
 | `CHUNK_SIZE` | `8388608` | Upload chunk size in bytes |
 | `DEFAULT_EXPIRY_HOURS` | `0` | Default link lifetime; `0` means links never expire |
 | `MAX_REQUEST_FILES` | `25` | Ceiling on how many files one request link will accept |
+| `MAX_SHARED_TEXT` | `131072` | Cap on a live text session, in bytes |
+| `DEFAULT_TEXT_EXPIRY_HOURS` | `24` | Default lifetime of a live text link; `0` means never |
 | `DEFAULT_REQUEST_EXPIRY_HOURS` | `336` | Default lifetime of a request link; `0` means never |
 | `MAX_PREVIEW_ROWS` | `50000` | Row cap for a spreadsheet preview |
 | `MAX_PARSE_BYTES` | `209715200` | Largest file the viewer will parse |
@@ -249,8 +254,33 @@ lines, keeping the key, the quoting and the length, so you can show the shape of
 an `.env` to somebody without showing the secrets — and the page says plainly
 that it is doing so, because that view is no longer what you pasted.
 
-Nothing is uploaded. The text is kept in this browser so a reload does not lose
-what you were showing somebody.
+Nothing is uploaded until you ask for it. The text is kept in this browser so a
+reload does not lose what you were showing somebody.
+
+**Sharing it live.** Press *Start sharing* and you get a link. Whoever opens it
+watches the text change as you type — typically a few hundred milliseconds
+behind, with no reloading at either end. The sharer's page and the viewer's page
+render through the same component, so "they see the same text" is true of the
+rendering as well as the content.
+
+The link is the read secret, as with a share link: anyone holding it can read
+the text, and the page says so. Writing needs an edit token handed back once at
+creation, which never leaves the sharer's browser — a viewer who sends an update
+over the socket is ignored rather than relayed. If **Hide values** is on, the
+masked version is what is shared: the real values never leave the sharer's
+machine. Stopping deletes the session, because the text was only ever on the
+server to serve that link.
+
+Updates travel over a WebSocket, and the sharer's browser also writes a snapshot
+over HTTP every so often. The snapshot is what someone opening the link later
+sees before the first keystroke reaches them, what survives a reload at either
+end, and what a viewer falls back to polling when the socket cannot be reached
+at all — behind a proxy that strips upgrades, say. The link still works there,
+a few seconds behind instead of instantly.
+
+Sessions expire after 24 hours by default (`DEFAULT_TEXT_EXPIRY_HOURS`) and are
+capped at 128 KB (`MAX_SHARED_TEXT`), so a link cannot quietly become file
+storage.
 
 ### Markdown preview
 

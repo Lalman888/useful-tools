@@ -3,7 +3,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { customAlphabet } from "nanoid";
-import { DATA_DIR, FILES_DIR, REQUESTS_DIR } from "./config.ts";
+import { DATA_DIR, FILES_DIR, REQUESTS_DIR, TEXT_DIR } from "./config.ts";
 
 /** Unambiguous alphabet: no look-alike characters, so ids survive being read aloud. */
 const ID_ALPHABET = "0123456789abcdefghijkmnpqrstuvwxyz";
@@ -249,6 +249,7 @@ export function ensureDirs(): { writable: boolean; reason: string } {
   try {
     fs.mkdirSync(FILES_DIR, { recursive: true });
     fs.mkdirSync(REQUESTS_DIR, { recursive: true });
+    fs.mkdirSync(TEXT_DIR, { recursive: true });
     // Creating the directory is not proof we can write into it.
     const probe = path.join(FILES_DIR, ".write-probe");
     fs.writeFileSync(probe, "");

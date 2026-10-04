@@ -98,8 +98,8 @@ export const TOOLS: ToolPage[] = [
     href: "/text",
     name: "Live text",
     description:
-      "Paste anything and read it back exactly as pasted — every space, tab and blank line intact, nothing reformatted or highlighted. Sized for reading off a screen, and it can hide the values in an .env before you show it to anybody.",
-    detail: "Verbatim · nothing uploaded",
+      "Paste anything and read it back exactly as pasted — every space, tab and blank line intact, nothing reformatted or highlighted. Share a link and the other person watches it change as you type, and you can hide the values in an .env before you do.",
+    detail: "Verbatim · share live",
     indexable: true,
   },
   {

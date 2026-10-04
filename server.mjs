@@ -105,6 +105,143 @@ function handleMessage(socket, raw) {
   }
 }
 
+/* ---------------------------- live text relay ----------------------------- */
+
+/**
+ * Live text sessions. One sharer types; everybody holding the link watches.
+ *
+ * The relay keeps only what it needs to fan a message out: who is in the room
+ * and the latest text, so somebody arriving mid-sentence sees the current state
+ * rather than waiting for the next keystroke. Durable storage is the Next API's
+ * job, and the sharer's browser writes a snapshot there on its own schedule —
+ * this process never decides where a session lives or whether a token is good.
+ */
+const textRooms = new Map(); // id -> { host: WebSocket|null, watchers: Set, text: string, touchedAt: number }
+
+const TEXT_ROOM_TTL_MS = 26 * 60 * 60 * 1000; // outlives the 24h default link
+
+function textRoom(id) {
+  let room = textRooms.get(id);
+  if (!room) {
+    room = { host: null, watchers: new Set(), text: "", touchedAt: Date.now() };
+    textRooms.set(id, room);
+  }
+  room.touchedAt = Date.now();
+  return room;
+}
+
+function watcherCount(room) {
+  return room.watchers.size;
+}
+
+function announceWatchers(room) {
+  if (room.host) send(room.host, { type: "watchers", count: watcherCount(room) });
+}
+
+function leaveTextRoom(socket) {
+  const id = socket.textId;
+  if (!id) return;
+  const room = textRooms.get(id);
+  socket.textId = null;
+  if (!room) return;
+
+  if (room.host === socket) {
+    room.host = null;
+    // Watchers keep the last text on screen; they are told the sharer went
+    // away rather than being left to wonder why it stopped updating.
+    for (const watcher of room.watchers) send(watcher, { type: "host-left" });
+  } else {
+    room.watchers.delete(socket);
+    announceWatchers(room);
+  }
+  if (!room.host && room.watchers.size === 0) textRooms.delete(id);
+}
+
+/**
+ * Checks an edit token against the session store, by asking the API in this
+ * same process. Loopback, and only once per sharer per connection.
+ */
+async function verifyTextToken(id, token) {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/text/${encodeURIComponent(id)}/verify?token=${encodeURIComponent(token)}`
+    );
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+const ID_RE = /^[0-9abcdefghijkmnpqrstuvwxyz]{16}$/;
+
+async function handleTextMessage(socket, raw) {
+  let message;
+  try {
+    message = JSON.parse(raw);
+  } catch {
+    return send(socket, { type: "error", error: "Malformed message." });
+  }
+
+  switch (message.type) {
+    case "host": {
+      const id = String(message.id ?? "");
+      if (!ID_RE.test(id)) return send(socket, { type: "error", error: "Unknown session." });
+      const verified = await verifyTextToken(id, String(message.token ?? ""));
+      if (!verified?.ok) {
+        return send(socket, { type: "error", error: "Not your session." });
+      }
+      leaveTextRoom(socket);
+      const room = textRoom(id);
+      // A second connection claiming the same session takes over — the usual
+      // cause is the sharer reloading the page, and refusing would strand them.
+      if (room.host && room.host !== socket) send(room.host, { type: "taken-over" });
+      room.host = socket;
+      if (!room.text) room.text = verified.text ?? "";
+      socket.textId = id;
+      send(socket, { type: "hosting", watchers: watcherCount(room) });
+      break;
+    }
+    case "watch": {
+      const id = String(message.id ?? "");
+      if (!ID_RE.test(id)) return send(socket, { type: "error", error: "Unknown session." });
+      leaveTextRoom(socket);
+      const room = textRoom(id);
+      room.watchers.add(socket);
+      socket.textId = id;
+      // Send what the room already holds, so a viewer who joins mid-session is
+      // not staring at an empty screen until the next keystroke.
+      send(socket, { type: "text", text: room.text, live: Boolean(room.host) });
+      announceWatchers(room);
+      break;
+    }
+    case "update": {
+      const room = textRooms.get(socket.textId);
+      // Only the socket that proved it holds the edit token may write; a
+      // watcher sending this is ignored rather than trusted.
+      if (!room || room.host !== socket) return;
+      const text = String(message.text ?? "");
+      room.text = text;
+      room.touchedAt = Date.now();
+      for (const watcher of room.watchers) send(watcher, { type: "text", text, live: true });
+      break;
+    }
+    case "stop": {
+      const room = textRooms.get(socket.textId);
+      if (!room || room.host !== socket) return;
+      for (const watcher of room.watchers) send(watcher, { type: "stopped" });
+      room.text = "";
+      break;
+    }
+    case "bye": {
+      leaveTextRoom(socket);
+      break;
+    }
+    default:
+      send(socket, { type: "error", error: "Unknown message type." });
+  }
+}
+
 /* -------------------------------- bootstrap ------------------------------- */
 
 await app.prepare();
@@ -118,26 +255,48 @@ server.requestTimeout = 0;
 server.headersTimeout = 60_000;
 server.timeout = 0;
 
+// The cap also bounds a live text update, which is why MAX_SHARED_TEXT must
+// stay comfortably below it.
 const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
+
+const CHANNELS = { "/ws/p2p": "p2p", "/ws/text": "text" };
 
 server.on("upgrade", (request, socket, head) => {
   const { pathname } = parse(request.url);
-  if (pathname !== "/ws/p2p") {
+  const channel = CHANNELS[pathname];
+  if (!channel) {
     socket.destroy();
     return;
   }
-  wss.handleUpgrade(request, socket, head, (ws) => wss.emit("connection", ws));
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    ws.channel = channel;
+    wss.emit("connection", ws);
+  });
 });
 
 wss.on("connection", (socket) => {
   socket.roomCode = null;
+  socket.textId = null;
   socket.isAlive = true;
   socket.on("pong", () => {
     socket.isAlive = true;
   });
-  socket.on("message", (data) => handleMessage(socket, data.toString()));
-  socket.on("close", () => leaveRoom(socket));
-  socket.on("error", () => leaveRoom(socket));
+  socket.on("message", (data) => {
+    if (socket.channel === "text") {
+      // Async, and a rejection here must not take the process down.
+      void handleTextMessage(socket, data.toString()).catch(() => {
+        send(socket, { type: "error", error: "Could not handle that." });
+      });
+    } else {
+      handleMessage(socket, data.toString());
+    }
+  });
+  const cleanUp = () => {
+    leaveRoom(socket);
+    leaveTextRoom(socket);
+  };
+  socket.on("close", cleanUp);
+  socket.on("error", cleanUp);
 });
 
 // Drop peers that vanished without closing cleanly, and expire stale rooms.
@@ -155,6 +314,14 @@ const heartbeat = setInterval(() => {
     if (room.createdAt < cutoff) {
       for (const peer of room.peers) send(peer, { type: "error", error: "Transfer expired." });
       rooms.delete(code);
+    }
+  }
+  // Text rooms are held open by whoever is still connected; drop the ones
+  // nobody has touched, so an abandoned session cannot pin its text in memory.
+  const textCutoff = Date.now() - TEXT_ROOM_TTL_MS;
+  for (const [id, room] of textRooms) {
+    if (room.touchedAt < textCutoff && !room.host && room.watchers.size === 0) {
+      textRooms.delete(id);
     }
   }
 }, 30_000);

@@ -41,6 +41,19 @@ export const MAX_REQUEST_FILES = intFromEnv("MAX_REQUEST_FILES", 25);
 /** Default lifetime of a request link, in hours. `0` means it never expires. */
 export const DEFAULT_REQUEST_EXPIRY_HOURS = intFromEnv("DEFAULT_REQUEST_EXPIRY_HOURS", 336);
 
+/** Live text sessions: a link whose holder watches your text as you type. */
+export const TEXT_DIR = path.join(DATA_DIR, "text");
+
+/**
+ * Cap on a shared text, in bytes. Large enough for any config file or log
+ * extract, small enough that a session cannot be used as free file storage —
+ * and it has to stay under the WebSocket payload limit in server.mjs.
+ */
+export const MAX_SHARED_TEXT = intFromEnv("MAX_SHARED_TEXT", 128 * 1024);
+
+/** Default lifetime of a live text link, in hours. `0` means it never expires. */
+export const DEFAULT_TEXT_EXPIRY_HOURS = intFromEnv("DEFAULT_TEXT_EXPIRY_HOURS", 24);
+
 /** Cap on rows returned to the spreadsheet viewer in one response. */
 export const MAX_PREVIEW_ROWS = intFromEnv("MAX_PREVIEW_ROWS", 50_000);
 

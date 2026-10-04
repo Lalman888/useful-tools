@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { triggerDownload } from "@/lib/xlsxExport";
 import { safeFilename } from "@/lib/filename";
-import { Alert, Button, Checkbox, Field, cx } from "./ui";
+import {
+  openTextSocket,
+  sendJson,
+  shareUrl,
+  type HostMessage,
+} from "@/lib/textShareClient";
+import { forgetShare, readShare, rememberShare } from "@/lib/textShareHistory";
+import { VerbatimText } from "./VerbatimText";
+import { Alert, Button, Checkbox, Field, Spinner, cx } from "./ui";
 
 /**
  * Shows pasted text back exactly as it was pasted.
@@ -45,7 +53,7 @@ function maskAssignments(text: string): string {
     .join("\n");
 }
 
-export function LiveText() {
+export function LiveText({ canShare }: { canShare: boolean }) {
   const [text, setText] = useState("");
   const [wrap, setWrap] = useState(true);
   const [numbers, setNumbers] = useState(false);
@@ -55,6 +63,18 @@ export function LiveText() {
   const [copied, setCopied] = useState(false);
   const [saveAs, setSaveAs] = useState("");
   const [restored, setRestored] = useState(false);
+
+  // Sharing
+  const [share, setShare] = useState<{ id: string; editToken: string } | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [watchers, setWatchers] = useState(0);
+  const [connected, setConnected] = useState(false);
+  const [shareError, setShareError] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [origin, setOrigin] = useState("");
+  const socketRef = useRef<WebSocket | null>(null);
+  // What was last pushed, so an unchanged render does not re-send.
+  const sentRef = useRef<string | null>(null);
 
   // Kept per-browser only. Reloading the page mid-conversation and losing what
   // you were showing somebody would be the worst moment for it to vanish.
@@ -78,7 +98,6 @@ export function LiveText() {
 
   const shown = useMemo(() => (mask ? maskAssignments(text) : text), [mask, text]);
 
-  const lines = useMemo(() => shown.split("\n"), [shown]);
   const stats = useMemo(
     () => ({
       lines: text ? text.split("\n").length : 0,
@@ -89,6 +108,158 @@ export function LiveText() {
     }),
     [text]
   );
+
+  /* ------------------------------ sharing ------------------------------ */
+
+  // Reconnects to the session this browser was already sharing, so a reload
+  // does not strand everybody watching the link on a session nobody writes to.
+  useEffect(() => setOrigin(window.location.origin), []);
+
+  useEffect(() => {
+    const existing = readShare();
+    if (existing) setShare({ id: existing.id, editToken: existing.editToken });
+  }, []);
+
+  useEffect(() => {
+    if (!share) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const socket = await openTextSocket();
+        if (cancelled) {
+          socket.close();
+          return;
+        }
+        socketRef.current = socket;
+        socket.onmessage = (event) => {
+          let message: HostMessage;
+          try {
+            message = JSON.parse(String(event.data)) as HostMessage;
+          } catch {
+            return;
+          }
+          if (message.type === "hosting") {
+            setConnected(true);
+            setWatchers(message.watchers);
+            setShareError("");
+          } else if (message.type === "watchers") {
+            setWatchers(message.count);
+          } else if (message.type === "taken-over") {
+            setShareError("This link is now being shared from another tab.");
+          } else if (message.type === "error") {
+            // The session is gone — expired, or stopped from somewhere else.
+            setShareError(message.error);
+            setConnected(false);
+            forgetShare();
+            setShare(null);
+          }
+        };
+        socket.onclose = () => {
+          socketRef.current = null;
+          if (!cancelled) setConnected(false);
+        };
+        sendJson(socket, { type: "host", id: share.id, token: share.editToken });
+        // Whatever is on screen now is the truth; push it immediately rather
+        // than waiting for the next keystroke.
+        sentRef.current = null;
+      } catch {
+        if (!cancelled) {
+          setConnected(false);
+          setShareError(
+            "Live updates are not available on this deployment, so viewers will " +
+              "see the text refresh every few seconds instead."
+          );
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      const socket = socketRef.current;
+      socketRef.current = null;
+      socket?.close();
+    };
+  }, [share]);
+
+  // Push what is on screen. `shown`, not `text`: if values are hidden, the
+  // masked version is what is being shown and so what is shared — the raw
+  // secrets must not leave this browser.
+  useEffect(() => {
+    if (!share) return;
+    if (sentRef.current === shown) return;
+
+    const timer = setTimeout(() => {
+      sentRef.current = shown;
+      sendJson(socketRef.current, { type: "update", text: shown });
+      // And a snapshot, so somebody opening the link later — or reloading —
+      // gets the current text rather than an empty page.
+      void fetch(`/api/text/${share.id}?token=${encodeURIComponent(share.editToken)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: shown }),
+      }).catch(() => {
+        /* the live stream is unaffected; the snapshot catches up next time */
+      });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [share, shown]);
+
+  const startSharing = useCallback(async () => {
+    setStarting(true);
+    setShareError("");
+    try {
+      const response = await fetch("/api/text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const payload = (await response.json()) as {
+        id?: string;
+        editToken?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.id || !payload.editToken) {
+        throw new Error(payload.error ?? "Could not start sharing.");
+      }
+      rememberShare({ id: payload.id, editToken: payload.editToken });
+      sentRef.current = null;
+      setShare({ id: payload.id, editToken: payload.editToken });
+    } catch (caught) {
+      setShareError(caught instanceof Error ? caught.message : "Could not start sharing.");
+    } finally {
+      setStarting(false);
+    }
+  }, []);
+
+  const stopSharing = useCallback(async () => {
+    const current = share;
+    if (!current) return;
+    sendJson(socketRef.current, { type: "stop" });
+    setShare(null);
+    setConnected(false);
+    setWatchers(0);
+    forgetShare();
+    // Delete rather than just closing: the text was only ever on the server to
+    // serve this link, so when the link goes, so should it.
+    await fetch(`/api/text/${current.id}?token=${encodeURIComponent(current.editToken)}`, {
+      method: "DELETE",
+    }).catch(() => {
+      /* the link is already unreachable from this browser */
+    });
+  }, [share]);
+
+  const copyLink = async () => {
+    if (!share) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl(share.id));
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1800);
+    } catch {
+      /* clipboard blocked; the link is on screen */
+    }
+  };
 
   const copy = async () => {
     try {
@@ -109,8 +280,101 @@ export function LiveText() {
 
   const empty = !text;
 
+  const sharing = share !== null;
+  // window is not there during the server render, so this is filled in after
+  // mount rather than read inline.
+  const shareLink = origin && share ? `${origin}/t/${share.id}` : "";
+
   return (
     <div className="space-y-4">
+      {/* ------------------------------- share ------------------------------- */}
+      <div
+        className={cx(
+          "rounded-xl border px-4 py-3",
+          sharing ? "border-emerald-200 bg-emerald-50/60" : "border-slate-200 bg-white"
+        )}
+      >
+        {!sharing ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-slate-900">Share this text live</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {canShare
+                  ? "Send someone the link and they see what you type, as you type it."
+                  : "Needs a server with a disk, which this deployment does not have."}
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={startSharing}
+              disabled={!canShare || starting}
+            >
+              {starting && <Spinner />}
+              Start sharing
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                <span
+                  aria-hidden
+                  className={cx(
+                    "inline-block h-2 w-2 rounded-full",
+                    connected ? "animate-pulse bg-emerald-500" : "bg-amber-400"
+                  )}
+                />
+                {connected ? "Sharing live" : "Sharing"}
+              </span>
+              <span className="text-xs text-slate-600 tnum">
+                {watchers === 0
+                  ? "nobody watching yet"
+                  : `${watchers} ${watchers === 1 ? "person" : "people"} watching`}
+              </span>
+              <Button size="sm" variant="ghost" className="ml-auto" onClick={stopSharing}>
+                Stop sharing
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={shareLink}
+                onFocus={(event) => event.target.select()}
+                aria-label="Link to share"
+                className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-xs text-slate-700"
+              />
+              <Button size="sm" onClick={copyLink}>
+                {linkCopied ? "Copied" : "Copy link"}
+              </Button>
+              <a
+                href={shareLink}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-white"
+              >
+                Open
+              </a>
+            </div>
+
+            <p className="text-xs leading-relaxed text-slate-600">
+              Anyone with this link can read the text, so treat the link as the
+              secret.{" "}
+              {mask
+                ? "Values are hidden, and what you are sharing is the masked version — the real values stay in this browser."
+                : "They see exactly what is on your screen."}
+            </p>
+          </div>
+        )}
+
+        {shareError && (
+          <div className="mt-2.5">
+            <Alert tone="warn">{shareError}</Alert>
+          </div>
+        )}
+      </div>
+
       {/* ------------------------------ toolbar ------------------------------ */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
         <Button size="sm" onClick={() => setEditing((current) => !current)}>
@@ -176,39 +440,12 @@ export function LiveText() {
                 Whatever you paste appears here, character for character.
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <pre
-                  className={cx(
-                    "m-0 px-4 py-4 font-mono text-slate-900",
-                    // `break-all` rather than `break-words`: a long unbroken
-                    // token — a key, a URL — must wrap rather than force the
-                    // page sideways, and it has no spaces to break on.
-                    wrap ? "whitespace-pre-wrap break-all" : "whitespace-pre"
-                  )}
-                  style={{ fontSize: `${fontSize}px`, lineHeight: 1.6 }}
-                >
-                  {numbers ? (
-                    <code>
-                      {lines.map((line, index) => (
-                        <span key={index} className="block">
-                          <span
-                            aria-hidden
-                            className="mr-4 inline-block w-[3ch] shrink-0 text-right text-slate-400 select-none tnum"
-                          >
-                            {index + 1}
-                          </span>
-                          {line}
-                          {"\n"}
-                        </span>
-                      ))}
-                    </code>
-                  ) : (
-                    // One text node, so the browser has nothing of ours to
-                    // reflow and the content is provably unaltered.
-                    <code>{shown}</code>
-                  )}
-                </pre>
-              </div>
+              <VerbatimText
+                text={shown}
+                wrap={wrap}
+                numbers={numbers}
+                fontSize={fontSize}
+              />
             )}
           </div>
         </div>
